@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from sensor_qaqc.cli import checks_commands
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -127,10 +129,12 @@ def _add_checks(sub: _Subparsers[_Parser]) -> None:
     checks = sub.add_parser("checks", help="the check registry (#2)")
     group = checks.add_subparsers(dest="checks_command", required=True, metavar="<command>")
 
-    _leaf(group, "list", "registered checks with domains, channels and requirements")
+    list_ = _leaf(group, "list", "registered checks with domains, channels and requirements")
+    list_.set_defaults(func=checks_commands.checks_list_command)
 
     show = _leaf(group, "show", "one check: thresholds with provenance, false-alarm bound")
     show.add_argument("check_id", metavar="<id>", help="flat lowercase snake check_id")
+    show.set_defaults(func=checks_commands.checks_show_command)
 
     docs = _leaf(group, "docs", "generate per-check documentation pages (#11)")
     docs.add_argument("--out", type=Path, required=True, metavar="<dir>", help="output directory")

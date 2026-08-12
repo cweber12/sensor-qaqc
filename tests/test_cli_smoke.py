@@ -34,8 +34,8 @@ LEAF_COMMANDS = [
     ["run", "12345678-1", "--check", "quantisation", "--check", "spectral_slope"],
     ["report", "render", "runs/2026-08-11-12345678-1"],
     ["report", "render", "runs/2026-08-11-12345678-1", "--pdf"],
-    ["checks", "list"],
-    ["checks", "show", "quantisation"],
+    # checks list and checks show gained bodies in #2; tests/test_cli_checks.py
+    # owns them now. checks docs stays unimplemented until #11.
     ["checks", "docs", "--out", "docs/checks"],
 ]
 

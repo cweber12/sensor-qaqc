@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class FakeRecord:
     variable: str = "sea_water_temperature"
-    values: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+    series: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     dt: timedelta = timedelta(minutes=6)
     duration: timedelta = timedelta(days=21)
     n_valid: int = 5040
