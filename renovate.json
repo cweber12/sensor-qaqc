@@ -1,0 +1,18 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 8am on monday"],
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "One weekly PR for action digest bumps; the SHAs in the workflows are pins, not decisions.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "schedule": ["before 8am on monday"],
+      "automerge": true
+    }
+  ]
+}
