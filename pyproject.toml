@@ -43,6 +43,9 @@ dev = [
 
 [tool.hatch]
 build.targets.wheel.packages = [ "src/sensor_qaqc" ]
+# The lockfile is for development and CI reproducibility; it is never read at
+# runtime and does not belong in the source distribution (ADR 0005).
+build.targets.sdist.exclude = [ "uv.lock" ]
 
 [tool.ruff]
 line-length = 100
