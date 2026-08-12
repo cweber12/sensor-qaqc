@@ -71,6 +71,10 @@ FULL_ALPHA = 0.01
 # 6 min native -> 12, 30, 60, 120, 360 min (#2's ladder).
 DECIMATION_FACTORS = (2, 5, 10, 20, 60)
 GAP_FRACTIONS = (0.05, 0.15, 0.30)
+# An independent statement of the #2 PRD's four control names: the runtime
+# guard in negative_controls must not read the mapping it is guarding, or
+# a shrunken mapping would shrink the expectation with it (B4 on #22).
+_PRD_NEGATIVE_CONTROL_NAMES = frozenset({"white_noise", "flatline", "ramp", "quantised"})
 
 
 class BatteryError(Exception):
@@ -126,13 +130,24 @@ def negative_controls(
     registry: Registry, check: Check, thresholds: Mapping[str, ThresholdLike]
 ) -> None:
     """White noise, flatline, ramp and a quantised series must not PASS."""
+    iterated = set()
     for name, generator in NEGATIVE_CONTROLS.items():
+        iterated.add(name)
         record = generator(derive_seed(check.check_id, f"negative_{name}", 0))
         _require_admissible(check, record, name)
         result = _evaluate(registry, check, record, thresholds)
         if result.verdict is Verdict.PASS:
             msg = f"{check.check_id!r} PASSed the {name!r} negative control"
             raise BatteryError(msg)
+    if iterated != _PRD_NEGATIVE_CONTROL_NAMES:
+        missing = sorted(_PRD_NEGATIVE_CONTROL_NAMES - iterated)
+        unexpected = sorted(iterated - _PRD_NEGATIVE_CONTROL_NAMES)
+        msg = (
+            f"negative controls for {check.check_id!r} did not iterate the"
+            f" four PRD-named controls (missing {missing}, unexpected"
+            f" {unexpected}): a shrunken control set passes vacuously"
+        )
+        raise BatteryError(msg)
 
 
 def red_noise_false_alarms(

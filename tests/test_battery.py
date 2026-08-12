@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from sensor_qaqc.core import battery
 from sensor_qaqc.core.battery import (
     DECIMATION_FACTORS,
     FULL_REALISATIONS,
@@ -276,6 +277,21 @@ def test_an_inadmissible_control_is_a_battery_failure_not_a_pass() -> None:
     # battery loudly, never satisfy "must not PASS" silently.
     check = DummyCheck(check_id="never_admissible", requirements=(MinValidSamples(n=10**6),))
     with pytest.raises(BatteryError, match="inadmissible control tests nothing"):
+        negative_controls(_registered(check), check, NO_THRESHOLDS)
+
+
+def test_a_shrunken_negative_control_set_is_a_battery_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The runtime half of B4 on #22: immutability protects the mapping
+    # object, not the name it is bound to. Confirmed live: with one control
+    # removed, run_smoke_battery completed silently over three controls.
+    # negative_controls must refuse to complete unless it iterated exactly
+    # the four PRD-named controls.
+    shrunk = {name: NEGATIVE_CONTROLS[name] for name in NEGATIVE_CONTROLS if name != "quantised"}
+    monkeypatch.setattr(battery, "NEGATIVE_CONTROLS", shrunk)
+    check = DummyCheck(check_id="three_controls")
+    with pytest.raises(BatteryError, match=r"missing.*quantised"):
         negative_controls(_registered(check), check, NO_THRESHOLDS)
 
 

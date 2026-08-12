@@ -118,3 +118,14 @@ def test_gaps_are_nan_in_place_and_the_grid_never_shrinks() -> None:
 
 def test_the_negative_control_set_is_the_prd_four() -> None:
     assert set(NEGATIVE_CONTROLS) == {"white_noise", "flatline", "ramp", "quantised"}
+
+
+def test_the_negative_control_set_refuses_mutation() -> None:
+    # B4 on #22, confirmed live: as a module-level mutable dict, a single
+    # NEGATIVE_CONTROLS.pop("quantised") shrank every subsequent battery
+    # run to three controls with the whole suite green - the four-name
+    # test above guards import-time contents only.
+    with pytest.raises(AttributeError):
+        NEGATIVE_CONTROLS.pop("quantised")  # type: ignore[attr-defined]
+    with pytest.raises(TypeError, match="does not support item"):
+        NEGATIVE_CONTROLS["white_noise"] = white_noise  # type: ignore[index]
