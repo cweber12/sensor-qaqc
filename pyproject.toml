@@ -30,6 +30,10 @@ classifiers = [
 # Dependencies land with the first import, each floor carrying its reason in
 # the commit whose code needs it (ADR 0005).
 dependencies = [
+  # First import: core/synthetic.py, the battery's generators. Bare name, no
+  # floor: any numpy the pandas floor tolerates suffices (ADR 0005 - a floor
+  # would be a number without a reason).
+  "numpy",
   # First import: core/records.py types the record series. Floor: lowercase
   # offset aliases ("6min", "h"), which the battery's decimation ladder
   # resamples with (reason recorded in #1).
