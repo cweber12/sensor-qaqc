@@ -49,6 +49,8 @@ import pandas as pd
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from sensor_qaqc.core.records import RecordView
+
 BATTERY_VARIABLE = "sea_water_temperature"
 BATTERY_DT = timedelta(minutes=6)
 BATTERY_DURATION = timedelta(days=21)
@@ -167,7 +169,7 @@ NEGATIVE_CONTROLS: dict[str, Callable[[int], SyntheticRecord]] = {
 }
 
 
-def decimate(record: SyntheticRecord, factor: int) -> SyntheticRecord:
+def decimate(record: RecordView, factor: int) -> SyntheticRecord:
     """Simulate a coarser logging interval by taking every ``factor``-th sample.
 
     Stride selection, not averaging: a logger at 60 min takes instantaneous
@@ -183,7 +185,7 @@ def decimate(record: SyntheticRecord, factor: int) -> SyntheticRecord:
     )
 
 
-def with_gaps(record: SyntheticRecord, fraction: float, seed: int) -> SyntheticRecord:
+def with_gaps(record: RecordView, fraction: float, seed: int) -> SyntheticRecord:
     """Mask a fraction of samples to NaN in place - the grid never shrinks (#3)."""
     if not 0.0 <= fraction < 1.0:
         msg = f"gap fraction must be in [0, 1), got {fraction}"
