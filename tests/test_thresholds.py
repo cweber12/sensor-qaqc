@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
+from typing import Any, cast
+
 import pytest
 
 import sensor_qaqc.core.thresholds
@@ -35,6 +38,28 @@ def test_a_threshold_cannot_exist_without_provenance() -> None:
     # No unspecified variant: provenance is a required constructor argument.
     with pytest.raises(TypeError):
         Threshold(value=1.0, unit="h")  # type: ignore[call-arg]
+
+
+def test_a_none_provenance_is_rejected_at_runtime() -> None:
+    # Issue #21: mypy flags the literal None, but the runtime must refuse
+    # too - the invariant cannot rest on the type checker alone.
+    with pytest.raises(TypeError, match="provenance"):
+        Threshold(value=1.0, unit="h", provenance=None)  # type: ignore[arg-type]
+
+
+def test_replace_cannot_strip_provenance() -> None:
+    # dataclasses.replace re-runs __post_init__; this pins that it stays true.
+    with pytest.raises(TypeError, match="provenance"):
+        dataclasses.replace(PHYSICAL, provenance=cast("Any", None))
+
+
+def test_an_any_typed_none_provenance_is_rejected() -> None:
+    # The YAML-shaped route (#5/#6): an empty provenance key parses to None
+    # typed as Any, which mypy cannot see through - only a runtime guard
+    # catches it.
+    parsed: dict[str, Any] = {"value": 1.0, "unit": "h", "provenance": None}
+    with pytest.raises(TypeError, match="provenance"):
+        Threshold(value=parsed["value"], unit=parsed["unit"], provenance=parsed["provenance"])
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
