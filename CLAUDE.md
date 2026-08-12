@@ -234,3 +234,20 @@ from, it is not ready to commit.
 
 **`check_id`s are never renamed.** They live in archived run folders forever; the registry
 id set may only grow.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in GitHub Issues (`cweber12/sensor-qaqc`), managed via the
+`gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage labels, used verbatim: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context; ADRs live in `docs/decisions/` (not `docs/adr/`). See
+`docs/agents/domain.md`.
