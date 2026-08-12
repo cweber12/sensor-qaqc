@@ -1,0 +1,13 @@
+# cloned support repos
+erddapy
+compliance-checker
+ioos-python-package-skeleton
+ioos_qc
+ioos_code_lab
+
+## data files
+data
+
+## reference files
+qc_refs
+verification_refs
