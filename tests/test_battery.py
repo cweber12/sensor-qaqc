@@ -197,6 +197,26 @@ def test_a_check_that_punishes_gaps_fails_gap_robustness() -> None:
         gap_robustness(_registered(check), check, NO_THRESHOLDS)
 
 
+def test_a_positive_control_that_does_not_pass_fails_both_ladders() -> None:
+    # The guard that closed audit finding 2 on #2 (vacuous ladders): a
+    # control the check cannot PASS at native resolution gives the ladders
+    # nothing to degrade from, so both must refuse loudly rather than walk
+    # their rungs against a meaningless baseline. Neutering the guard makes
+    # the ladders raise for the wrong reason (mutation finding B3 on #22).
+    def never_good_enough(
+        record: RecordView,  # noqa: ARG001 - broken on purpose
+        thresholds: Mapping[str, ThresholdLike],  # noqa: ARG001 - broken on purpose
+        capabilities: Mapping[str, object],  # noqa: ARG001 - broken on purpose
+    ) -> CheckResult:
+        return CheckResult(verdict=Verdict.MARGINAL, reason="never good enough")
+
+    check = DummyCheck(check_id="never_passing", compute_fn=never_good_enough)
+    with pytest.raises(BatteryError, match="nothing to degrade from"):
+        decimation_ladder(_registered(check), check, NO_THRESHOLDS)
+    with pytest.raises(BatteryError, match="nothing to degrade from"):
+        gap_robustness(_registered(check), check, NO_THRESHOLDS)
+
+
 def test_a_nondeterministic_check_fails_the_determinism_case() -> None:
     counter = itertools.count()
 
