@@ -42,12 +42,15 @@ class CheckResult:
     a renderer may never recompute them (#10). ``reason`` is free text for
     the reader; it is required exactly when the verdict is INCONCLUSIVE
     and welcome on any verdict (a MARGINAL without a reason is legal but
-    unkind).
+    unkind). ``provides`` carries computed-once capability payloads by
+    name; the runner hands them to the declared consumers and to nobody
+    else.
     """
 
     verdict: Verdict
     metrics: Mapping[str, float] = field(default_factory=dict)
     reason: str | None = None
+    provides: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.verdict is Verdict.INCONCLUSIVE and not (self.reason or "").strip():
