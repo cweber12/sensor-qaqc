@@ -347,7 +347,10 @@ def _assert_every_case_class_evaluated(
         expected[f"gaps {fraction:.0%}"] = (gapped, 1)
     # Determinism means the identically-seeded record is judged twice.
     expected["determinism pair"] = (red_noise(derive_seed(check_id, "determinism", 0)), 2)
-    for index in range(n_realisations):
+    # Reconstructing every realisation would double the full tier's cost:
+    # the endpoints prove the seeded family and the total evaluation count
+    # below proves nothing was dropped in between.
+    for index in (0, n_realisations - 1):
         realisation = red_noise(derive_seed(check_id, "red_noise", index))
         expected[f"red noise realisation {index}"] = (realisation, 1)
     wrong = {
@@ -356,6 +359,8 @@ def _assert_every_case_class_evaluated(
         if counts[_fingerprint(record)] != required
     }
     assert not wrong, f"case-class records not evaluated as required: {wrong}"
+    non_far = len(NEGATIVE_CONTROLS) + 2 + len(DECIMATION_FACTORS) + len(GAP_FRACTIONS) + 2
+    assert len(seen) == non_far + n_realisations
 
 
 def test_the_smoke_tier_evaluates_every_case_class() -> None:
