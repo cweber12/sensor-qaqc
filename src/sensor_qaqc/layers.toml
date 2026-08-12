@@ -1,0 +1,31 @@
+# The layer dependency graph, as data (#1, ADR 0001). Enforced by
+# tests/test_layers.py on both axes: intra-package and third-party imports
+# alike - core importing erddapy is exactly as much of a breach as core
+# importing marine.
+#
+# Allowances are explicit and non-transitive: a layer may import another
+# layer's *modules* without inheriting its third-party allowance. (Transitive
+# allowances would hand marine an openpyxl licence through instruments.)
+# The stdlib is always allowed and is not listed. The 2026-08-11 audit,
+# finding 3, added numpy/pandas to instruments, yaml to core, and made
+# marine's numerics explicit - the original table assumed transitivity.
+#
+# Growing an allowance is a visible, reviewable diff to this file plus the
+# commit whose code needs it. matplotlib.use("Agg") belongs in cli, never in
+# an importable module.
+
+[layers.core]
+layers = []
+third_party = ["numpy", "pandas", "jinja2", "matplotlib", "yaml"]
+
+[layers.instruments]
+layers = ["core"]
+third_party = ["numpy", "pandas", "openpyxl"]
+
+[layers.marine]
+layers = ["core", "instruments"]
+third_party = ["numpy", "pandas", "scipy", "ioos_qc", "erddapy"]
+
+[layers.cli]
+layers = ["core", "instruments", "marine"]
+third_party = ["*"]
