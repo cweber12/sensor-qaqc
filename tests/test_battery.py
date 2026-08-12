@@ -232,6 +232,23 @@ def test_a_nondeterministic_check_fails_the_determinism_case() -> None:
         determinism(_registered(check), check, NO_THRESHOLDS)
 
 
+def test_a_positive_control_that_ignores_its_seed_fails_determinism() -> None:
+    # The control-reproducibility guard (mutation finding B8 on #22): a
+    # control that ignores its seed makes "identical inputs, identical
+    # results" untestable - the two inputs are not identical. Neutered,
+    # the case decays into comparing two unrelated draws and raises for
+    # the wrong reason ("different results"), which the match catches.
+    draws = itertools.count()
+
+    class SeedIgnoringCheck(DummyCheck):
+        def positive_control(self, seed: int) -> RecordView:  # noqa: ARG002 - broken on purpose
+            return red_noise(next(draws))
+
+    check = SeedIgnoringCheck(check_id="seed_ignorer")
+    with pytest.raises(BatteryError, match="not reproducible"):
+        determinism(_registered(check), check, NO_THRESHOLDS)
+
+
 def test_a_check_exceeding_its_declared_bound_fails_the_smoke_far() -> None:
     # Declares 5 % and FAILs nearly every AR(1) realisation: the honest
     # declaration would be ~1.0, and the smoke tier already catches the lie.
