@@ -1,0 +1,78 @@
+# Weekly early-warning legs (#1). These fail on the world changing - a new
+# dependency release, a dead link - which must not block a PR, so they run on
+# a schedule and open an issue instead. The same split as locked vs unlocked
+# dependencies: ci.yml answers "is this diff good", this answers "is the
+# world still as we recorded it".
+name: weekly
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Monday 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unlocked:
+    # Latest releases of everything via pip, ignoring uv.lock - breakage
+    # here surfaces as an issue, not as a blocked PR (ADR 0005).
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e . --group dev
+      - run: pytest
+      - name: opt-in suites (network, battery)
+        shell: bash
+        # pytest exits 5 when a marker selects nothing; the network suite
+        # arrives with #5 and the battery with #2, and an empty selection is
+        # not a failure of anything (2026-08-11 audit, finding 4).
+        run: pytest -m "network or battery" || { rc=$?; [ "$rc" -eq 5 ]; }
+
+  links:
+    # A broken DOI is the world changing, not your diff (#11).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --no-progress 'docs/**/*.md' '*.md'
+          fail: true
+
+  file-issue:
+    needs: [unlocked, links]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: open or update the weekly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "weekly workflow failed"
+        run: |
+          body="A weekly leg (unlocked dependencies or link check) failed: $RUN_URL"
+          existing=$(gh issue list --repo "$REPO" --state open --json title,number \
+            --jq "[.[] | select(.title == \"$TITLE\")][0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$TITLE" --body "$body"
+          fi
