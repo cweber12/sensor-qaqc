@@ -1,0 +1,59 @@
+# Rewritten from the skeleton per #1: the run folder is the product, so a
+# report without a run folder id and its manifest is unactionable.
+name: Bug Report
+description: Report that something is not working as expected
+labels: ["Type: Bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What went wrong?
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command and exit code
+      description: The exact invocation and what it exited with.
+      placeholder: "sensor-qaqc run 12345678-3 -> exit 1"
+    validations:
+      required: true
+  - type: input
+    id: run-id
+    attributes:
+      label: Run folder id
+      description: >-
+        The run_id of the affected run. If the failure happened before a run
+        folder was created (parse error, CLI error, install problem), write
+        "no run folder" and say where in the process it failed.
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: manifest.json
+      description: >-
+        Paste the run folder's manifest.json - it records the inputs, resolved
+        config, versions and fetched URLs the bug occurred under. If there is
+        no run folder, paste the full command output instead.
+      render: json
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - Linux
+        - MacOS
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Errors, traceback, logs
+      description: If the manifest above does not already show it.
+      render: pytb
