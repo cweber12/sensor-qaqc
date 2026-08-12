@@ -28,8 +28,13 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 # Dependencies land with the first import, each floor carrying its reason in
-# the commit whose code needs it (ADR 0005). Stage 1 code imports only stdlib.
-dependencies = []
+# the commit whose code needs it (ADR 0005).
+dependencies = [
+  # First import: core/records.py types the record series. Floor: lowercase
+  # offset aliases ("6min", "h"), which the battery's decimation ladder
+  # resamples with (reason recorded in #1).
+  "pandas>=2.2",
+]
 scripts.sensor-qaqc = "sensor_qaqc.cli.__main__:main"
 
 [dependency-groups]
@@ -88,6 +93,12 @@ lint.per-file-ignores."tests/**" = [ "INP001", "S101" ]
 [tool.mypy]
 files = [ "scripts", "src", "tests" ]
 strict = true
+overrides = [
+  # pandas ships no py.typed and pandas-stubs is deliberately not adopted
+  # initially (#1). Scoped ignore, not a global one: any other untyped import
+  # still fails.
+  { module = [ "pandas", "pandas.*" ], ignore_missing_imports = true },
+]
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
