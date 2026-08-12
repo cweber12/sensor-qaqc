@@ -26,6 +26,56 @@ each landing in the same commit as the artifact it constrains.
 PRDs here are audited cold by a fresh session before implementation. Push back on anything
 unjustified rather than implementing it.
 
+## Repo facts
+
+- **Default branch:** `main` — protected: PRs required, green checks required, no force
+  pushes, admins bound. Never commit to it directly; protection enforces this.
+- **Issue tracker:** GitHub Issues via `gh`. `ready-for-agent` labels work that is scoped
+  and unblocked.
+- **Toolchain:** Python ≥ 3.11 in the uv-managed venv (`.venv`). Never the system
+  interpreter.
+- **Setup:** `uv sync`
+- **Gate command:** `uv run python scripts/gate.py`
+- **Merge strategy:** merge or rebase commits, never squash (disabled repo-wide) — every
+  slice stays revertible and bisectable on its own.
+
+## How to work: confirm, plan, branch, slice, PR
+
+Follow this for any task beyond a one-line fix.
+
+1. **Confirm understanding before doing anything.** Say back the ask in your own words,
+   name the ambiguities and how you intend to read them, and say what you believe is *out*
+   of scope. If two readings lead to materially different work, ask.
+2. **Plan in slices.** A slice does one thing nameable in a short sentence, leaves the
+   gates passing, and can be committed and understood alone. Rename, refactor, bugfix and
+   feature are separate slices. Slices are vertical — a complete path through the layers,
+   not one layer across the feature.
+3. **Confirm the plan before implementing.** When it changes mid-flight — and verification
+   will change it — say so and re-confirm rather than quietly expanding scope.
+4. **The plan is written down before slice 1.** *In this repo the PRD issues are the plan
+   files*: plans for PRD work live in the issue and its comments, amended there. Work no
+   PRD covers gets `docs/plans/<slug>.md`, committed first, stating the problem, decisions,
+   test seams, rejected alternatives, and what is out of scope. Decisions that outlive the
+   task get an ADR in `docs/decisions/` (not `docs/adr/`), in the same commit as the
+   artifact it constrains.
+5. **Split into issues only when it earns its keep** — the test is whether two people could
+   pick up two issues without colliding. One slice, one issue is overhead.
+6. **Branch per unit of work**, cut from up-to-date `main`: `issue-<n>-<slug>`, or a short
+   slug when no issue exists. One issue per branch; adjacent fixes you notice get their own
+   issue, not a ride-along commit. Rebase onto moved `main` *before* opening the PR; after
+   the PR is open, never rewrite pushed history.
+7. **One slice, one commit, verified.** Behaviour changes ship tests in the same commit; a
+   bugfix starts with a regression test proven to fail first (`must_fail` rows in the gate
+   table support this). Before each commit: run the gate, read its output, check
+   `git status` and `git diff --staged` for only-this-slice content. Do not batch commits.
+8. **Push, open a PR, wait.** The PR body carries `Closes #<n>`, the what and why at slice
+   level, **the actual gate output** (a claim is not evidence), and anything not done.
+   Keep PRs reviewable (~400 changed lines / ~5 slices as a guide). **Do not merge, approve
+   or bypass checks yourself** — wait for confirmation. On confirmation: merge (never
+   squash), branches delete on merge, return to `main` and pull.
+9. **Report honestly.** Blocked slices are named, failing output is shown, and bugs found
+   in your own earlier work are stated plainly.
+
 ## Layout
 
 `src/` layout, four layers, three domains under `marine/`:
@@ -50,6 +100,7 @@ import a marine constant.
 
 ```
 uv sync                            # environment + dev tools, from the committed lock
+uv run python scripts/gate.py     # every gate, one command, a row per gate
 uv run pytest                      # network/battery markers excluded by default
 uv run pre-commit run --all-files
 uv run mypy                        # strict
@@ -73,6 +124,42 @@ uv run mypy                        # strict
   reason, never inherited.
 - `docs/qc_refs/` and `docs/verification_refs/` — sourced compendia justifying most
   thresholds. On disk but gitignored pending the citations-only publication pass (#11).
+
+## Verification
+
+Don't claim something works because it ran without raising. Assert the property that
+matters: the output is correct, not merely produced; the state changed, not merely that
+the call returned; the parser produced the right value, not merely no exception.
+
+**The gate set lives in the table in `scripts/gate.py`, not in prose.** Add a gate by
+adding a row. Every row runs even when an earlier one fails, so a failure cannot hide
+behind another.
+
+**Recorded deviation:** CI does not invoke the gate script. `ci.yml` fans the same rows
+out as separate jobs — a #1 decision, so a type error cannot hide behind a test failure —
+and adds packaging assertions the local build row skips. The gate rows and the CI jobs
+must stay the same set; if they drift, the drift is the first bug to fix.
+
+## Security
+
+- **Never commit secrets** — no keys, tokens, passwords or `.env` contents, not in
+  fixtures, not "temporarily". Secrets come from the environment.
+- If a secret lands in a commit, say so immediately; it is compromised on push and
+  removing the commit does not un-leak it.
+- No `curl | sh`, no dependencies from unverified sources, no widening permissions or
+  scopes to make an error go away.
+
+## General discipline
+
+- **Never invent an identifier, path, URL or API.** If you can't confirm it, leave
+  `TODO(verify)` and say so in your summary.
+- **Nothing fails silently.** Anything skipped, empty or unusable is reported.
+- **Read-only stays read-only.** Never write into an input directory; never let generated
+  output become next run's input.
+- **Don't fix a symptom with a constant.** If a value is off, find why — and remember
+  every number here carries provenance.
+- **When this file is wrong, fixing it is a slice** — propose the edit in its own commit
+  rather than silently working around it.
 
 ## Commit messages
 
