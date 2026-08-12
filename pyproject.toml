@@ -24,6 +24,9 @@ requires-python = ">=3.11"
 # the commit whose code needs it (ADR 0005). Stage 1 code imports only stdlib.
 dependencies = []
 
+[project.scripts]
+sensor-qaqc = "sensor_qaqc.cli.__main__:main"
+
 [dependency-groups]
 # Dev tools carry no floors: the lockfile pins what is actually used, and the
 # weekly unlocked CI leg tests the latest releases.
@@ -74,7 +77,7 @@ docstring-code-format = true
 
 [tool.mypy]
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 # network and battery (the full conformance battery, #2) are opt-in suites
