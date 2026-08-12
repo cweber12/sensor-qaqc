@@ -1,0 +1,8 @@
+# Every check_id ever registered, one per line, in the order it landed
+# (#1, #2). APPEND-ONLY: ids live in archived run folders forever, so an
+# id may be added but never renamed and never removed - deprecating a
+# check retires its code, not its id. tests/test_check_ids.py asserts
+# this file and the assembled registry are exactly equal, so a rename or
+# removal goes red and an addition is a visible one-line diff here.
+#
+# No checks are registered yet; the first real ids arrive with #6-#8.
