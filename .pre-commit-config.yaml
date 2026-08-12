@@ -1,0 +1,41 @@
+# Harvested from ioos-python-package-skeleton and trimmed per #1:
+# dropped interrogate (docstring-presence checking is what it was rejected
+# for), blackdoc and nbqa-black (two formatters alongside ruff-format),
+# nbqa-* and nb-strip-paths (no notebooks until #9), requirements-txt-fixer
+# and file-contents-sorter (no requirements files), add-trailing-comma and
+# sort-all (ruff-format and RUF022 cover both).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        # The largest legitimate artifact is the 84 kB sample export under
+        # docs/data/; 200 kB leaves headroom for a longer deployment's export
+        # while still catching an accidental data or output commit.
+        args: ["--maxkb=200"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+
+  - repo: https://github.com/tox-dev/pyproject-fmt
+    rev: v2.27.0
+    hooks:
+      - id: pyproject-fmt
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.29.0
+    hooks:
+      - id: zizmor

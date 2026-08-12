@@ -1,9 +1,8 @@
 # The sole dependency declaration (ADR 0005). No requirements files.
-
 [build-system]
-# hatchling 1.27 is the first release supporting PEP 639 license expressions.
-requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+# hatchling 1.27 is the first release supporting PEP 639 license expressions.
+requires = [ "hatchling>=1.27" ]
 
 [project]
 name = "sensor-qaqc"
@@ -13,19 +12,24 @@ name = "sensor-qaqc"
 # manifest: version, git_commit, git_dirty (ADR 0004).
 version = "0.1.0"
 description = "Verifies in-water temperature records from low-cost loggers against reference stations"
-authors = [{ name = "Cole Weber", email = "cole.d.weber12@gmail.com" }]
 license = "BSD-3-Clause"
-license-files = ["LICENSE"]
+license-files = [ "LICENSE" ]
+authors = [ { name = "Cole Weber", email = "cole.d.weber12@gmail.com" } ]
 # 3.11 floor: tomllib, enum.StrEnum, typing.Self and datetime.UTC are all
 # 3.11, and 3.10 reaches EOL in October 2026. (Not pandas 2.2, which supports
 # 3.9 - that is a pandas floor, recorded in #1 for when pandas arrives.)
 requires-python = ">=3.11"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
 # Dependencies land with the first import, each floor carrying its reason in
 # the commit whose code needs it (ADR 0005). Stage 1 code imports only stdlib.
 dependencies = []
-
-[project.scripts]
-sensor-qaqc = "sensor_qaqc.cli.__main__:main"
+scripts.sensor-qaqc = "sensor_qaqc.cli.__main__:main"
 
 [dependency-groups]
 # Dev tools carry no floors: the lockfile pins what is actually used, and the
@@ -37,16 +41,20 @@ dev = [
   "ruff",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/sensor_qaqc"]
+[tool.hatch]
+build.targets.wheel.packages = [ "src/sensor_qaqc" ]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
-
-[tool.ruff.lint]
-select = ["ALL"]
-ignore = [
+src = [ "src", "tests" ]
+format.docstring-code-format = true
+lint.select = [ "ALL" ]
+lint.ignore = [
+  # Conflicts with ruff-format by its own warning.
+  "COM812",
+  # Per-file copyright headers add nothing over the LICENSE file that governs
+  # the whole distribution.
+  "CPY",
   # Docstring *presence* checking is what interrogate was dropped for; the
   # standard here is docstrings carrying reasoning, which no linter can check.
   "D1",
@@ -54,37 +62,28 @@ ignore = [
   # class docstring) and D212 (summary on the first line) are chosen.
   "D203",
   "D213",
-  # Conflict with ruff-format by its own warning.
-  "COM812",
-  "ISC001",
   # Requiring exception messages to be assigned to a variable first adds a
   # line per raise and buys nothing; message content is tested directly.
   "EM101",
   "EM102",
+  # Conflicts with ruff-format by its own warning.
+  "ISC001",
   "TRY003",
-  # Per-file copyright headers add nothing over the LICENSE file that governs
-  # the whole distribution.
-  "CPY",
 ]
-
-[tool.ruff.lint.per-file-ignores]
 # S101: pytest's assertion mechanism is assert.
 # INP001: the tests directory is deliberately not a package.
-"tests/**" = ["S101", "INP001"]
-
-[tool.ruff.format]
-docstring-code-format = true
+lint.per-file-ignores."tests/**" = [ "INP001", "S101" ]
 
 [tool.mypy]
+files = [ "src", "tests" ]
 strict = true
-files = ["src", "tests"]
 
-[tool.pytest.ini_options]
+[tool.pytest]
+ini_options.testpaths = [ "tests" ]
 # network and battery (the full conformance battery, #2) are opt-in suites
 # run by the weekly unlocked CI leg, not on every PR.
-addopts = "-m 'not network and not battery' --strict-markers"
-markers = [
-  "network: requires network access",
+ini_options.addopts = "-m 'not network and not battery' --strict-markers"
+ini_options.markers = [
   "battery: full conformance battery (#2); slow, run weekly",
+  "network: requires network access",
 ]
-testpaths = ["tests"]
