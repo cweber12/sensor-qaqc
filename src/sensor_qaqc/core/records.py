@@ -7,10 +7,13 @@ the identity key that selects thresholds (``variable``, a CF
 facts requirements are evaluated against. #3's canonical record will
 satisfy it; the conformance battery constructs synthetic ones.
 
-``values`` follows the masking contract (#3, #6): a uniform time grid at
+``series`` follows the masking contract (#3, #6): a uniform time grid at
 exactly ``dt``, gaps and QC-rejected points as NaN in place - never
 dropped, never interpolated. That is why ``n_valid`` exists separately:
-significance arithmetic uses ``n_valid``, never ``len()``.
+significance arithmetic uses ``n_valid``, never ``len()``. (The name is
+``series``, not pandas' conventional ``.values``, because ruff's
+pandas-vet reads any ``.values`` attribute as the ndarray anti-pattern
+and would demand a suppression at every use site.)
 """
 
 from __future__ import annotations
@@ -32,8 +35,8 @@ class RecordView(Protocol):
         ...
 
     @property
-    def values(self) -> pd.Series:
-        """The series on a uniform grid at ``dt``, gaps as NaN in place."""
+    def series(self) -> pd.Series:
+        """The observations on a uniform grid at ``dt``, gaps as NaN in place."""
         ...
 
     @property
