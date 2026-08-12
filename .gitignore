@@ -1,13 +1,21 @@
-# cloned support repos
-erddapy
-compliance-checker
-ioos-python-package-skeleton
-ioos_qc
-ioos_code_lab
+# Reference compendia — full annotated originals stay local pending the
+# citations-only publication pass (#11).
+/docs/qc_refs/
+/docs/verification_refs/
 
-## data files
-data
+# Working data. Sample inputs under docs/data/ are tracked deliberately.
+/data/
 
-## reference files
-qc_refs
-verification_refs
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
