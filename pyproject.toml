@@ -1,0 +1,87 @@
+# The sole dependency declaration (ADR 0005). No requirements files.
+
+[build-system]
+# hatchling 1.27 is the first release supporting PEP 639 license expressions.
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sensor-qaqc"
+# Static, not setuptools-scm: the version is recorded in run manifests for
+# years and must not depend on whether a tarball has a .git directory or on
+# what day it was built. Git state is recorded honestly and separately in the
+# manifest: version, git_commit, git_dirty (ADR 0004).
+version = "0.1.0"
+description = "Verifies in-water temperature records from low-cost loggers against reference stations"
+authors = [{ name = "Cole Weber", email = "cole.d.weber12@gmail.com" }]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+# 3.11 floor: tomllib, enum.StrEnum, typing.Self and datetime.UTC are all
+# 3.11, and 3.10 reaches EOL in October 2026. (Not pandas 2.2, which supports
+# 3.9 - that is a pandas floor, recorded in #1 for when pandas arrives.)
+requires-python = ">=3.11"
+# Dependencies land with the first import, each floor carrying its reason in
+# the commit whose code needs it (ADR 0005). Stage 1 code imports only stdlib.
+dependencies = []
+
+[dependency-groups]
+# Dev tools carry no floors: the lockfile pins what is actually used, and the
+# weekly unlocked CI leg tests the latest releases.
+dev = [
+  "mypy",
+  "pre-commit",
+  "pytest",
+  "ruff",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sensor_qaqc"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  # Docstring *presence* checking is what interrogate was dropped for; the
+  # standard here is docstrings carrying reasoning, which no linter can check.
+  "D1",
+  # One of each incompatible pydocstyle pair: D211 (no blank line before
+  # class docstring) and D212 (summary on the first line) are chosen.
+  "D203",
+  "D213",
+  # Conflict with ruff-format by its own warning.
+  "COM812",
+  "ISC001",
+  # Requiring exception messages to be assigned to a variable first adds a
+  # line per raise and buys nothing; message content is tested directly.
+  "EM101",
+  "EM102",
+  "TRY003",
+  # Per-file copyright headers add nothing over the LICENSE file that governs
+  # the whole distribution.
+  "CPY",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# S101: pytest's assertion mechanism is assert.
+# INP001: the tests directory is deliberately not a package.
+"tests/**" = ["S101", "INP001"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+# network and battery (the full conformance battery, #2) are opt-in suites
+# run by the weekly unlocked CI leg, not on every PR.
+addopts = "-m 'not network and not battery' --strict-markers"
+markers = [
+  "network: requires network access",
+  "battery: full conformance battery (#2); slow, run weekly",
+]
+testpaths = ["tests"]
