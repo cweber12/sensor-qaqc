@@ -90,6 +90,9 @@ lint.ignore = [
 # printing is their job. S603: gate.py's subprocess argv comes only from the
 # static table in the file, never from input.
 lint.per-file-ignores."scripts/**" = [ "INP001", "S603", "T201" ]
+# T201: the command surface's output is print; everything under cli/ exists
+# to talk to a terminal. Importable layers stay print-free.
+lint.per-file-ignores."src/sensor_qaqc/cli/**" = [ "T201" ]
 # S101: pytest's assertion mechanism is assert.
 # INP001: the tests directory is deliberately not a package.
 lint.per-file-ignores."tests/**" = [ "INP001", "S101" ]
