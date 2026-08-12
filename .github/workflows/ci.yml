@@ -90,3 +90,21 @@ jobs:
           uv venv "$RUNNER_TEMP/smoke"
           uv pip install --python "$RUNNER_TEMP/smoke/bin/python" dist/*.whl
           "$RUNNER_TEMP/smoke/bin/sensor-qaqc" --help
+
+  ci-ok:
+    # Fan-in for branch protection: main requires this one context instead of
+    # nine job names that silently stop covering the matrix when it changes.
+    # ci.yml alone decides what "green" means.
+    needs: [lint, typecheck, test, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: fail unless every needed job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = "success" ] || exit 1
+          done
