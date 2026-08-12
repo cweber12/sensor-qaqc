@@ -11,14 +11,68 @@ reference stations. It answers two different questions with two different kinds 
 - **QA** — is this record measuring the ocean, or measuring itself? Record-level verdicts
   from quantisation, spectral, autocorrelation, astronomical and cross-sensor evidence.
 
+Four verdicts: PASS / MARGINAL / FAIL / INCONCLUSIVE. `ok = verdict == "PASS"` is banned.
+Nothing is gated: no check suppresses another, no overall pass/fail, and exit 0 means the
+run completed, not that the record passed.
+
 ## Where the design lives
 
 Architecture and scope are recorded in **GitHub issues #1–#13**, not in this file. Read the
-relevant PRD before starting work. Decisions are written up as ADRs in `docs/decisions/` as
-PRDs and issues close.
+relevant PRD *and its comments* before starting work — audit findings and corrections live
+in the comments, and several supersede the body they are attached to. Decisions are written
+up as ADRs in `docs/decisions/` (MADR-lite: Status / Context / Decision / Consequences),
+each landing in the same commit as the artifact it constrains.
 
-This file is expanded by #1 (Foundation & packaging). Until then it covers commit
-conventions only.
+PRDs here are audited cold by a fresh session before implementation. Push back on anything
+unjustified rather than implementing it.
+
+## Layout
+
+`src/` layout, four layers, three domains under `marine/`:
+
+```
+src/sensor_qaqc/
+├── core/            check protocol, verdicts, thresholds + provenance, run machinery
+├── instruments/     vendor export formats and datasheet facts (onset/)
+├── marine/          plausibility/ (#6), integrity/ (#7), coherence/ (#8), stations/ (#5)
+└── cli/             command surface — the only layer that may import everything
+```
+
+The layer dependency graph is data — `src/sensor_qaqc/layers.toml` — and enforced by
+`tests/test_layers.py` on both axes: intra-package and third-party imports alike.
+Allowances are explicit and non-transitive. Growing an allowance is a one-line diff to
+`layers.toml` in the commit whose code needs it (ADR 0001).
+
+Thresholds are injected into checks, never imported by them. No module under a domain may
+import a marine constant.
+
+## Development
+
+```
+uv sync                            # environment + dev tools, from the committed lock
+uv run pytest                      # network/battery markers excluded by default
+uv run pre-commit run --all-files
+uv run mypy                        # strict
+```
+
+- **Dependencies land with the first import** (ADR 0005). pyproject.toml is the sole
+  declaration; each floor arrives in the commit whose code imports it, with its reason.
+- Tests must pass from the committed state on Windows: paths through `pathlib`, filesystem
+  tests through `tmp_path`. The Windows CI leg is load-bearing, not box-ticking.
+- Fixtures under `tests/data/` and `docs/data/` are byte-exact (`-text` in
+  `.gitattributes`); `tests/test_fixture_hashes.py` asserts committed SHA-256 values. If it
+  goes red, fix the attribute, never the hash.
+
+## Locations outside this repo
+
+- `../vendor/` — cloned support repos (erddapy, ioos_qc, ioos_code_lab,
+  ioos-python-package-skeleton). Reference only; not part of the working tree.
+- `../hobo_toolkit` — the prior prototype. **Not authoritative; its architecture is not to
+  be ported.** External facts carry over as citations; measurements of this setup carry
+  over as claims the tool re-verifies; chosen thresholds are re-derived with a written
+  reason, never inherited.
+- `docs/qc_refs/` and `docs/verification_refs/` — sourced compendia justifying most
+  thresholds. On disk but gitignored pending the citations-only publication pass (#11).
 
 ## Commit messages
 
@@ -48,8 +102,8 @@ conventions only.
 
 ### Scope
 
-Optional. Use the subpackage or the config file the change belongs to: `core`, `marine`,
-`config`, `ingest`, `report`, `stations`.
+Optional. Use the layer, domain or config file the change belongs to: `core`,
+`instruments`, `marine`, `cli`, `stations`, `config`.
 
 ### Description
 
@@ -65,7 +119,7 @@ do if that is likely to be assumed.
 
 - `Refs: #12` — the issue this belongs to. Include one wherever an issue exists.
 - `BREAKING CHANGE: <description>` — or a `!` after the type/scope: `feat(core)!: ...`
-- `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
+- `Co-Authored-By: <the model that wrote it> <noreply@anthropic.com>`
 
 ### Example
 
@@ -90,3 +144,6 @@ in a separate, single-purpose commit that states what changed, from what to what
 from, it is not ready to commit.
 
 **One logical change per commit.** If the description needs an "and", it is two commits.
+
+**`check_id`s are never renamed.** They live in archived run folders forever; the registry
+id set may only grow.
