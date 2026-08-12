@@ -12,13 +12,19 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import pytest
 
 from sensor_qaqc.core.battery import (
+    DECIMATION_FACTORS,
+    FULL_REALISATIONS,
+    GAP_FRACTIONS,
+    SMOKE_REALISATIONS,
     BatteryError,
+    FarMeasurement,
     _binomial_critical,
     assert_full_far,
     assert_smoke_far,
@@ -33,13 +39,22 @@ from sensor_qaqc.core.battery import (
 from sensor_qaqc.core.checks import Channel, Domain
 from sensor_qaqc.core.registry import Registry
 from sensor_qaqc.core.requirements import MinValidSamples
-from sensor_qaqc.core.synthetic import AR1_TAU, BATTERY_DT, red_noise
+from sensor_qaqc.core.synthetic import (
+    AR1_TAU,
+    BATTERY_DT,
+    NEGATIVE_CONTROLS,
+    decimate,
+    derive_seed,
+    red_noise,
+    with_gaps,
+)
 from sensor_qaqc.core.thresholds import Provenance, Threshold
 from sensor_qaqc.core.verdicts import CheckResult, Verdict
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from sensor_qaqc.core.checks import Check
     from sensor_qaqc.core.records import RecordView
     from sensor_qaqc.core.requirements import Requirement
     from sensor_qaqc.core.thresholds import ThresholdLike
@@ -56,7 +71,10 @@ def _memory_band(
     capabilities: Mapping[str, object],  # noqa: ARG001 - dummy consumes none
 ) -> CheckResult:
     """PASS iff lag-1 memory sits where AR(1) physics puts it for this dt."""
-    if record.series.std() == 0.0:
+    # nunique, not std() == 0.0: a constant series can carry float summation
+    # noise (std ~1e-15 for some levels), and NaN autocorr past the guard
+    # would decay into an arbitrary verdict plus a numpy divide warning.
+    if record.series.dropna().nunique() <= 1:
         return CheckResult(
             verdict=Verdict.INCONCLUSIVE, reason="zero variance: memory is undefined"
         )
@@ -235,6 +253,86 @@ def test_an_inconclusive_null_is_a_battery_failure() -> None:
     check = DummyCheck(check_id="undecided", compute_fn=undecided)
     with pytest.raises(BatteryError, match="unmeasured"):
         red_noise_false_alarms(_registered(check), check, NO_THRESHOLDS, 5)
+
+
+def _records_evaluated_by(
+    tier: Callable[[Registry, Check, Mapping[str, ThresholdLike]], FarMeasurement],
+    check_id: str,
+) -> list[RecordView]:
+    """Run ``tier`` under a well-behaved check that records every record it is shown."""
+    seen: list[RecordView] = []
+
+    def recording(
+        record: RecordView,
+        thresholds: Mapping[str, ThresholdLike],
+        capabilities: Mapping[str, object],
+    ) -> CheckResult:
+        seen.append(record)
+        return _memory_band(record, thresholds, capabilities)
+
+    # No requirements: the runner short-circuits an unmet requirement to
+    # INCONCLUSIVE before compute, which would hide records (the x60 rung
+    # has 84 samples) from the spy without the tier skipping anything.
+    check = DummyCheck(check_id=check_id, requirements=(), compute_fn=recording)
+    tier(_registered(check), check, NO_THRESHOLDS)
+    return seen
+
+
+def _fingerprint(record: RecordView) -> bytes:
+    """Byte-exact identity of a seeded record's values; identical NaNs collide, as wanted."""
+    fingerprint: bytes = record.series.to_numpy().tobytes()
+    return fingerprint
+
+
+def _assert_every_case_class_evaluated(
+    seen: list[RecordView], check_id: str, n_realisations: int
+) -> None:
+    """All five case classes reached the check, identified by their seeded records.
+
+    Deleting any case-class call from a tier function leaves the suite
+    green today (mutation finding B2 on #22): nothing asserted the tiers
+    actually orchestrate. Every expected record is reconstructed here from
+    the public generators and ``derive_seed``, so a tier that skips a case
+    class - or a rung, a fraction, or a realisation - is named exactly.
+    """
+    counts = Counter(_fingerprint(record) for record in seen)
+    positive = red_noise(derive_seed(check_id, "positive", 0))
+    expected: dict[str, tuple[RecordView, int]] = {}
+    for name, generator in NEGATIVE_CONTROLS.items():
+        control = generator(derive_seed(check_id, f"negative_{name}", 0))
+        expected[f"negative control {name!r}"] = (control, 1)
+    # Each ladder re-proves the positive control at native resolution first.
+    expected["positive control at native dt"] = (positive, 2)
+    for factor in DECIMATION_FACTORS:
+        expected[f"decimation x{factor}"] = (decimate(positive, factor), 1)
+    for fraction in GAP_FRACTIONS:
+        gapped = with_gaps(positive, fraction, derive_seed(check_id, "gap", round(fraction * 100)))
+        expected[f"gaps {fraction:.0%}"] = (gapped, 1)
+    # Determinism means the identically-seeded record is judged twice.
+    expected["determinism pair"] = (red_noise(derive_seed(check_id, "determinism", 0)), 2)
+    for index in range(n_realisations):
+        realisation = red_noise(derive_seed(check_id, "red_noise", index))
+        expected[f"red noise realisation {index}"] = (realisation, 1)
+    wrong = {
+        label: {"evaluated": counts[_fingerprint(record)], "required": required}
+        for label, (record, required) in expected.items()
+        if counts[_fingerprint(record)] != required
+    }
+    assert not wrong, f"case-class records not evaluated as required: {wrong}"
+
+
+def test_the_smoke_tier_evaluates_every_case_class() -> None:
+    seen = _records_evaluated_by(run_smoke_battery, "smoke_tier_spy")
+    _assert_every_case_class_evaluated(seen, "smoke_tier_spy", SMOKE_REALISATIONS)
+
+
+def test_the_full_tier_evaluates_every_case_class() -> None:
+    # Deliberately not battery-marked: the weekly tier's FAR *measurement*
+    # is weekly, but its orchestration must be proven at PR cadence -
+    # a battery-marked orchestration test is deselected on exactly the
+    # runs that would catch the mutation (B2).
+    seen = _records_evaluated_by(run_full_battery, "full_tier_spy")
+    _assert_every_case_class_evaluated(seen, "full_tier_spy", FULL_REALISATIONS)
 
 
 def test_the_binomial_critical_count_is_exact_on_hand_checkable_cases() -> None:
