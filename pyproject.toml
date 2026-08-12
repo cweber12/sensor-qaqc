@@ -40,6 +40,9 @@ dev = [
   "pre-commit",
   "pytest",
   "ruff",
+  # In the venv so scripts/gate.py's build row runs via `python -m uv` with
+  # nothing on PATH beyond what `uv sync` itself provides.
+  "uv",
 ]
 
 [tool.hatch]
@@ -74,12 +77,16 @@ lint.ignore = [
   "ISC001",
   "TRY003",
 ]
+# T201/INP001: scripts are standalone executables, not package modules, and
+# printing is their job. S603: gate.py's subprocess argv comes only from the
+# static table in the file, never from input.
+lint.per-file-ignores."scripts/**" = [ "INP001", "S603", "T201" ]
 # S101: pytest's assertion mechanism is assert.
 # INP001: the tests directory is deliberately not a package.
 lint.per-file-ignores."tests/**" = [ "INP001", "S101" ]
 
 [tool.mypy]
-files = [ "src", "tests" ]
+files = [ "scripts", "src", "tests" ]
 strict = true
 
 [tool.pytest]
