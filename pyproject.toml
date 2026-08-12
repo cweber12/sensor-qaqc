@@ -12,6 +12,7 @@ name = "sensor-qaqc"
 # manifest: version, git_commit, git_dirty (ADR 0004).
 version = "0.1.0"
 description = "Verifies in-water temperature records from low-cost loggers against reference stations"
+readme = "README.md"
 license = "BSD-3-Clause"
 license-files = [ "LICENSE" ]
 authors = [ { name = "Cole Weber", email = "cole.d.weber12@gmail.com" } ]
