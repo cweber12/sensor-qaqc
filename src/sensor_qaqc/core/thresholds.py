@@ -68,6 +68,13 @@ class Threshold:
         if not self.unit.strip():
             msg = "threshold requires a non-empty unit ('1' for dimensionless)"
             raise ValueError(msg)
+        # mypy enforces this for literal arguments but is silent for Any -
+        # the route YAML-built thresholds (#5/#6) take - so the invariant
+        # must also hold at runtime. isinstance, not truthiness, so a
+        # falsy-but-valid Provenance variant could not regress it (#21).
+        if not isinstance(self.provenance, Provenance):
+            msg = f"threshold provenance must be a Provenance, got {self.provenance!r}"
+            raise TypeError(msg)
 
 
 @dataclass(frozen=True)
