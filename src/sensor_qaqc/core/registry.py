@@ -59,6 +59,7 @@ class Registry:
     def register(self, check: Check) -> None:
         self._validate_id(check)
         self._validate_false_alarm_bound(check)
+        self._validate_positive_control(check)
         self._validate_capabilities(check)
         self._checks[check.check_id] = check
         for capability in check.provides:
@@ -112,6 +113,20 @@ class Registry:
             msg = (
                 f"check {check.check_id!r} declares false-alarm bound in unit"
                 f" {bound.unit!r}; a rate is dimensionless (unit '1')"
+            )
+            raise RegistrationError(msg)
+
+    @staticmethod
+    def _validate_positive_control(check: Check) -> None:
+        # The protocol is not runtime-enforced, and a check without its
+        # control registered cleanly and died later as a raw AttributeError
+        # inside the battery (B5 on #22); the audit resolution on #2 puts
+        # the demand here, at the gate.
+        if not callable(getattr(check, "positive_control", None)):
+            msg = (
+                f"check {check.check_id!r} declares no callable positive_control;"
+                " without a seeded control the battery's ladders have nothing"
+                " to degrade from and would pass vacuously"
             )
             raise RegistrationError(msg)
 
