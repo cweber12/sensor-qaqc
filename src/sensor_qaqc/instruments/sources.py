@@ -58,6 +58,7 @@ class EventsTableSpec:
     """
 
     header_row: int
+    sample_number_column: str
     timestamp_column: re.Pattern[str]
     marker: str
     dynamic_columns: bool
@@ -71,6 +72,8 @@ class DetailsTableSpec:
     section_column: int
     key_column: int
     value_column: int
+    series_column: int
+    series_prefix: str
 
 
 @dataclass(frozen=True)
@@ -136,6 +139,7 @@ def _events_spec(format_id: str, raw: Mapping[str, object]) -> EventsTableSpec:
         raise ValueError(f"{format_id}.events needs the marker its cells carry")
     return EventsTableSpec(
         header_row=_positive_int(format_id, "events.header_row", raw.get("header_row")),
+        sample_number_column=str(raw.get("sample_number_column", "")),
         timestamp_column=_pattern(
             format_id, "events", "timestamp_column", raw.get("timestamp_column")
         ),
@@ -148,6 +152,9 @@ def _details_spec(format_id: str, raw: Mapping[str, object]) -> DetailsTableSpec
     layout = str(raw.get("layout", ""))
     if layout != "key_value":
         raise ValueError(f"{format_id}.details.layout must be 'key_value', got {layout!r}")
+    prefix = str(raw.get("series_prefix", ""))
+    if not prefix.strip():
+        raise ValueError(f"{format_id}.details needs the prefix its series declaration carries")
     return DetailsTableSpec(
         layout=layout,
         section_column=_positive_int(
@@ -155,6 +162,8 @@ def _details_spec(format_id: str, raw: Mapping[str, object]) -> DetailsTableSpec
         ),
         key_column=_positive_int(format_id, "details.key_column", raw.get("key_column")),
         value_column=_positive_int(format_id, "details.value_column", raw.get("value_column")),
+        series_column=_positive_int(format_id, "details.series_column", raw.get("series_column")),
+        series_prefix=prefix,
     )
 
 

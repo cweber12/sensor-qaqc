@@ -38,6 +38,7 @@ formats:
       value_column: '^(?P<series>.+) , (?P<unit>.+)$'
     events:
       header_row: 1
+      sample_number_column: '#'
       timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
       # One column per event type, and only types that occurred appear, so the
       # column set is dynamic: a fixed-position parser would read the wrong
@@ -51,3 +52,9 @@ formats:
       section_column: 2
       key_column: 3
       value_column: 4
+      # "Series : Tidbit 1 , °F" sits at the outer column, between the
+      # deployment sections and the per-series ones. Its remainder has the same
+      # shape as the data value header, which makes the unit a fact the export
+      # states twice - and so a free checksum on unit handling.
+      series_column: 1
+      series_prefix: 'Series : '

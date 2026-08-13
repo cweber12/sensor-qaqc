@@ -34,6 +34,10 @@ dependencies = [
   # floor: any numpy the pandas floor tolerates suffices (ADR 0005 - a floor
   # would be a number without a reason).
   "numpy",
+  # First import: instruments/onset/hoboconnect.py reads the workbook export.
+  # Bare name, no floor: only read_only workbook iteration is used, which is
+  # not a recent API (ADR 0005 - a floor would be a number without a reason).
+  "openpyxl",
   # First import: core/records.py types the record series. Floor: lowercase
   # offset aliases ("6min", "h"), which the battery's decimation ladder
   # resamples with (reason recorded in #1).
@@ -113,6 +117,11 @@ overrides = [
   # initially (#1). Scoped ignore, not a global one: any other untyped import
   # still fails.
   { module = [ "pandas", "pandas.*" ], ignore_missing_imports = true },
+  # openpyxl ships no py.typed and types-openpyxl is a third-party stub set
+  # for a library one module imports; the reader converts everything it takes
+  # from a cell before it leaves that module, so the untyped surface is one
+  # file wide. Scoped ignore, not a global one.
+  { module = [ "openpyxl", "openpyxl.*" ], ignore_missing_imports = true },
 ]
 
 [tool.pytest]

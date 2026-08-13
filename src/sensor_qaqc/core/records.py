@@ -116,10 +116,10 @@ class EventType(enum.StrEnum):
     """Normalised event-log vocabulary, closed on purpose.
 
     A free string would let ``Power Warn`` and ``power_warn`` coexist in one
-    archive as two different events. Members are seeded from the pristine
-    export's log; the rest (``power_warn``, ``safe_shutdown``,
-    ``water_detect``, ``new_interval``) arrive with the parser and the
-    synthetic sheets that exercise them (#3 slice 5).
+    archive as two different events. The first three are what the pristine
+    export's log contains; the rest arrive with the parser that produces them
+    and the synthetic sheets that exercise them, because no real export on
+    hand has ever logged one.
 
     What an event means for a verdict is #7's decision, with an injected,
     provenance-carrying policy. Ingest only surfaces them.
@@ -128,6 +128,10 @@ class EventType(enum.StrEnum):
     STARTED = "started"
     HOST_CONNECTED = "host_connected"
     END_OF_FILE = "end_of_file"
+    POWER_WARN = "power_warn"
+    SAFE_SHUTDOWN = "safe_shutdown"
+    WATER_DETECT = "water_detect"
+    NEW_INTERVAL = "new_interval"
 
 
 @dataclass(frozen=True)

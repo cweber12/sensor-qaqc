@@ -323,6 +323,10 @@ def test_event_types_are_a_closed_vocabulary() -> None:
         "started",
         "host_connected",
         "end_of_file",
+        "power_warn",
+        "safe_shutdown",
+        "water_detect",
+        "new_interval",
     }
 
 
