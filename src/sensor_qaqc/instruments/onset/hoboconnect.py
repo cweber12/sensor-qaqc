@@ -29,13 +29,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import openpyxl
 
-from sensor_qaqc.core.records import LoggingMode
+from sensor_qaqc.core.records import EventType, LoggedEvent, LoggingMode
 from sensor_qaqc.instruments.extraction import (
     ExtractedMetadata,
     Extraction,
     PublishedStatistics,
 )
-from sensor_qaqc.instruments.tables import parse_data, parse_details
+from sensor_qaqc.instruments.tables import parse_data, parse_details, parse_events
 from sensor_qaqc.instruments.timezones import to_utc
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from sensor_qaqc.instruments.sources import SourceFormat
-    from sensor_qaqc.instruments.tables import DetailsTable
+    from sensor_qaqc.instruments.tables import DetailsTable, ParsedEvents
 
 # UDUNITS-2 symbols for the degree signs Onset writes in a column header.
 UNIT_SYMBOLS = {"\N{DEGREE SIGN}F": "degF", "\N{DEGREE SIGN}C": "degC"}
@@ -79,15 +79,21 @@ class HOBOconnectReader:
             raise ValueError(f"{source_format.format_id} declares no details table shape")
         self._format = source_format
         self._details_spec = source_format.details
+        self._events_spec = source_format.events
 
     def read(self, path: Path) -> Extraction:
         """Parse the workbook. Nothing is trimmed, masked or converted."""
         workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
         try:
-            # Read both sheets out before closing: a read_only worksheet is a
+            # Read every sheet out before closing: a read_only worksheet is a
             # cursor into the open file, not a table already in memory.
             data = parse_data(self._rows(workbook, "data"), self._format.data)
             details = parse_details(self._rows(workbook, "details"), self._details_spec)
+            logged = (
+                parse_events(self._rows(workbook, "events"), self._events_spec)
+                if self._events_spec is not None
+                else None
+            )
         finally:
             workbook.close()
 
@@ -95,13 +101,34 @@ class HOBOconnectReader:
         units = self._units(data.unit)
         self._check_declared_unit(details, units)
         published, published_notes = self._statistics(details, units, data.timezone_label)
+        events = self._events(logged, data.timezone_label, notes)
         return Extraction(
             format_id=self.format_id,
             timestamps=to_utc(data.timestamps, data.timezone_label),
             values=np.asarray(data.values, dtype=np.float64),
             metadata=self._metadata(details, units, data.timezone_label, notes),
             published=published,
+            events=events,
             notes=tuple(notes + published_notes),
+        )
+
+    def _events(
+        self, logged: ParsedEvents | None, label: str, notes: list[str]
+    ) -> tuple[LoggedEvent, ...]:
+        """Normalise the log's column names into the canonical vocabulary."""
+        if logged is None:
+            return ()
+        if logged.timezone_label != label:
+            raise ValueError(
+                f"the event table declares the zone {logged.timezone_label!r} but the data"
+                f" table declares {label!r}; two sheets written in different frames would"
+                " shift the log against the samples"
+            )
+        notes.extend(logged.notes)
+        stamps = to_utc([event.at for event in logged.events], label) if logged.events else []
+        return tuple(
+            LoggedEvent(at=when, event_type=_event_type(event.label))
+            for event, when in zip(logged.events, stamps, strict=True)
         )
 
     def _rows(self, workbook: openpyxl.Workbook, table: str) -> list[Sequence[object]]:
@@ -191,6 +218,20 @@ class HOBOconnectReader:
             ),
             [],
         )
+
+
+def _event_type(column: str) -> EventType:
+    """Normalise an event column heading into the canonical vocabulary."""
+    canonical = "_".join(column.lower().split())
+    try:
+        return EventType(canonical)
+    except ValueError as error:
+        known = ", ".join(sorted(member.value for member in EventType))
+        raise ValueError(
+            f"the event table has a {column!r} column, which normalises to {canonical!r};"
+            f" the vocabulary holds: {known}. An unrecognised entry in an audit trail is"
+            " refused rather than dropped - growing EventType is a one-line diff"
+        ) from error
 
 
 def _int(raw: str, name: str) -> int:

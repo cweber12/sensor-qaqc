@@ -38,6 +38,7 @@ formats:
       value_column: '^(?P<series>.+) , (?P<unit>.+)$'
     events:
       header_row: 1
+      sample_number_column: '#'
       timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
       # One column per event type, and only types that occurred appear, so the
       # column set is dynamic: a fixed-position parser would read the wrong

@@ -58,6 +58,7 @@ class EventsTableSpec:
     """
 
     header_row: int
+    sample_number_column: str
     timestamp_column: re.Pattern[str]
     marker: str
     dynamic_columns: bool
@@ -138,6 +139,7 @@ def _events_spec(format_id: str, raw: Mapping[str, object]) -> EventsTableSpec:
         raise ValueError(f"{format_id}.events needs the marker its cells carry")
     return EventsTableSpec(
         header_row=_positive_int(format_id, "events.header_row", raw.get("header_row")),
+        sample_number_column=str(raw.get("sample_number_column", "")),
         timestamp_column=_pattern(
             format_id, "events", "timestamp_column", raw.get("timestamp_column")
         ),

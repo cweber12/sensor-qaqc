@@ -19,13 +19,17 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
-    from datetime import datetime
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
-    from sensor_qaqc.instruments.sources import DataTableSpec, DetailsTableSpec
+    from sensor_qaqc.instruments.sources import (
+        DataTableSpec,
+        DetailsTableSpec,
+        EventsTableSpec,
+    )
 
 
 class MissingDetailError(LookupError):
@@ -55,6 +59,23 @@ class DetailsTable:
 
     def section(self, section: str) -> Mapping[str, str]:
         return {key: value for (found, key), value in self.entries.items() if found == section}
+
+
+@dataclass(frozen=True)
+class ParsedEvent:
+    """One marked cell of an event table: when, and which column marked it."""
+
+    at: datetime
+    label: str
+
+
+@dataclass(frozen=True)
+class ParsedEvents:
+    """The raw parse of an event table, in the order the rows carried it."""
+
+    events: tuple[ParsedEvent, ...]
+    timezone_label: str
+    notes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -160,13 +181,7 @@ def _locate(header: Sequence[object], spec: DataTableSpec) -> tuple[int, int, in
 def parse_data(rows: Iterable[Sequence[object]], spec: DataTableSpec) -> ParsedData:
     """Read the observations, refusing any row that cannot be placed."""
     iterator = iter(rows)
-    header: Sequence[object] | None = None
-    for position, row in enumerate(iterator, start=1):
-        if position == spec.header_row:
-            header = row
-            break
-    if header is None:
-        raise ValueError(f"the data table has no row {spec.header_row} to read a header from")
+    header = _header(iterator, spec.header_row, "data")
     number_at, stamp_at, value_at, series, unit, label = _locate(header, spec)
 
     numbers: list[int] = []
@@ -182,12 +197,7 @@ def parse_data(rows: Iterable[Sequence[object]], spec: DataTableSpec) -> ParsedD
             continue
         if stamp is None:
             raise ValueError(f"row {offset} of the data table has a value but no timestamp")
-        if not hasattr(stamp, "year"):
-            raise ValueError(
-                f"row {offset} of the data table holds {stamp!r} where a timestamp belongs;"
-                " a date the container did not store as a date is ambiguous, not readable"
-            )
-        stamps.append(stamp)  # type: ignore[arg-type]
+        stamps.append(_stamp(offset, stamp, "data"))
         values.append(_value(offset, value))
         if number_at >= 0:
             numbers.append(_number(offset, number, numbers))
@@ -201,6 +211,77 @@ def parse_data(rows: Iterable[Sequence[object]], spec: DataTableSpec) -> ParsedD
         timezone_label=label,
         notes=notes,
     )
+
+
+def parse_events(rows: Iterable[Sequence[object]], spec: EventsTableSpec) -> ParsedEvents:
+    """Read the event log, discovering its column set from the header.
+
+    One column per event type, and only types that occurred - so the columns
+    are found by name every time. Positions would be read off whichever export
+    the parser was written against, and the next one would silently disagree.
+    """
+    iterator = iter(rows)
+    header = _header(iterator, spec.header_row, "event")
+    headers = [_text(cell) for cell in header]
+    stamped = [(i, spec.timestamp_column.match(text)) for i, text in enumerate(headers) if text]
+    matched = [(i, found) for i, found in stamped if found is not None]
+    if len(matched) != 1:
+        raise ValueError(
+            f"{len(matched)} columns match the timestamp shape in the event header"
+            f" {[h for h in headers if h]}; exactly one is expected"
+        )
+    stamp_at, stamp_match = matched[0]
+    columns = {
+        i: text
+        for i, text in enumerate(headers)
+        if text and i != stamp_at and text != spec.sample_number_column
+    }
+
+    events: list[ParsedEvent] = []
+    blank = 0
+    for offset, row in enumerate(iterator, start=spec.header_row + 1):
+        stamp = _cell(row, stamp_at + 1)
+        marks = [(at, _text(_cell(row, at + 1))) for at in columns]
+        marked = [(at, mark) for at, mark in marks if mark is not None]
+        if stamp is None and not marked:
+            blank += 1
+            continue
+        if stamp is None:
+            raise ValueError(f"row {offset} of the event table marks an event but has no timestamp")
+        when = _stamp(offset, stamp, "event")
+        if not marked:
+            raise ValueError(f"row {offset} of the event table has a timestamp but marks no event")
+        for at, mark in marked:
+            if mark != spec.marker:
+                raise ValueError(
+                    f"row {offset} of the event table holds {mark!r} under {columns[at]!r}"
+                    f" where the marker {spec.marker!r} belongs"
+                )
+            events.append(ParsedEvent(at=when, label=columns[at]))
+    notes = (f"{blank} blank rows skipped in the event table",) if blank else ()
+    return ParsedEvents(
+        events=tuple(events),
+        timezone_label=str(stamp_match.group("timezone")),
+        notes=notes,
+    )
+
+
+def _header(iterator: Iterator[Sequence[object]], header_row: int, table: str) -> Sequence[object]:
+    """Return the declared header row, consuming everything above it."""
+    for position, row in enumerate(iterator, start=1):
+        if position == header_row:
+            return row
+    raise ValueError(f"the {table} table has no row {header_row} to read a header from")
+
+
+def _stamp(row: int, raw: object, table: str) -> datetime:
+    """Return a cell as a timestamp, refusing anything stored as text."""
+    if not isinstance(raw, datetime):
+        raise ValueError(  # noqa: TRY004 - a text date is an ambiguous file, not a caller's type error
+            f"row {row} of the {table} table holds {raw!r} where a timestamp belongs;"
+            " a date the container did not store as a date is ambiguous, not readable"
+        )
+    return raw
 
 
 def _value(row: int, raw: object) -> float:
