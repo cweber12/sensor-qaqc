@@ -123,9 +123,29 @@ def test_an_unknown_format_refuses_naming_what_exists() -> None:
         catalogue.for_format("star_oddi_csv")
 
 
-def test_a_pattern_missing_its_named_group_refuses() -> None:
-    with pytest.raises(ValueError, match="unit"):
+def test_a_declared_fact_the_pattern_does_not_capture_refuses() -> None:
+    with pytest.raises(ValueError, match=r"declares 'unit'.*does not capture"):
         parse_source_catalogue(_source_yaml(value_column="^(?P<series>.+) , (.+)$"))
+
+
+def test_a_captured_fact_the_format_did_not_declare_refuses() -> None:
+    # The mirror case, and the one that matters most: a pattern quietly
+    # growing a group would start extracting a fact nobody reviewed, and the
+    # record would carry it as though a human had checked the header.
+    with pytest.raises(ValueError, match=r"captures 'unit'.*without declaring"):
+        parse_source_catalogue(_source_yaml(declares="[timezone]"))
+
+
+def test_a_text_container_without_a_declared_stamp_format_refuses() -> None:
+    # Inferring a date format is how 11/07 becomes the 7th of November for the
+    # twelve days a year where both readings parse and neither looks wrong.
+    with pytest.raises(ValueError, match="timestamp_format"):
+        parse_source_catalogue(_source_yaml(container="csv"))
+
+
+def test_a_typed_container_declaring_a_stamp_format_refuses() -> None:
+    with pytest.raises(ValueError, match="read by nobody"):
+        parse_source_catalogue(_source_yaml(timestamp_format="%Y-%m-%d"))
 
 
 def test_a_pattern_that_does_not_compile_refuses() -> None:
@@ -142,11 +162,15 @@ def _source_yaml(
     *,
     container: str = "xlsx",
     value_column: str = "^(?P<series>.+) , (?P<unit>.+)$",
+    declares: str = "[timezone, unit]",
+    timestamp_format: str = "",
 ) -> str:
+    stamp = f"    timestamp_format: '{timestamp_format}'\n" if timestamp_format else ""
     return (
         "formats:\n"
         "  hoboconnect_xlsx:\n"
         f"    container: {container}\n"
+        f"{stamp}"
         "    tables:\n"
         "      data: Data\n"
         "    data:\n"
@@ -154,4 +178,5 @@ def _source_yaml(
         "      sample_number_column: '#'\n"
         "      timestamp_column: '^Date-Time \\((?P<timezone>.+)\\)$'\n"
         f"      value_column: '{value_column}'\n"
+        f"      header_declares: {declares}\n"
     )

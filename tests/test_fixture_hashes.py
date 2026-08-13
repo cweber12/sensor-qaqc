@@ -36,7 +36,26 @@ FIXTURES = {
     "tests/data/yellow_buoy_temps_edited.xlsx": (
         "9b6294534e13dd88aec674cccb99d0b53201ebf9bce955fe3d25811dd3e9f55e"
     ),
+    # The pristine workbook's three sheets written out as CSV files by
+    # scripts/derive_csv_fixtures.py, run once (#3 slice 6). Pinned because
+    # the CSV adapter's whole claim is that they ingest to the same canonical
+    # record the workbook does: if these bytes drift, that comparison is
+    # against something nobody derived.
+    "tests/data/csv_bundle/data.csv": (
+        "75b7571607b1d7341f1d9fba397d9c5ae6cb4337431862ae0f0fc9c0415db0df"
+    ),
+    "tests/data/csv_bundle/events.csv": (
+        "b6b72aefbb537ba9778479fbabed670ef7c5c00a5aee2b1bac1da251deade19f"
+    ),
+    "tests/data/csv_bundle/details.csv": (
+        "d11279ddd8958e233b462954f47131de333c8f5961bebd2cecf23f207ec10a8c"
+    ),
 }
+
+# Every text fixture, checked for line-ending conversion. The workbooks are
+# zip containers and legitimately contain 0x0d, so they are covered by
+# `*.xlsx binary` in .gitattributes instead.
+TEXT_FIXTURES = tuple(rel for rel in FIXTURES if rel.endswith(".csv"))
 
 
 def _fixture_path(rel: str) -> Path:
@@ -48,13 +67,9 @@ def test_fixture_bytes_match_committed_hash() -> None:
     assert actual == FIXTURES
 
 
-def test_text_fixture_contains_no_crlf() -> None:
+def test_text_fixtures_contain_no_crlf() -> None:
     # Guards the other direction: a fixture re-saved with CRLF and a
     # "helpfully" updated hash would pass the hash test on every leg while
     # silently changing the bytes every consumer parses.
-    #
-    # Only the text canary is checked. The workbook is a zip container and
-    # will contain 0x0d bytes legitimately, so the same assertion there would
-    # fail for a reason that has nothing to do with line-ending conversion;
-    # `*.xlsx binary` in .gitattributes is what protects it.
-    assert b"\r" not in _fixture_path(EOL_CANARY).read_bytes()
+    converted = [rel for rel in TEXT_FIXTURES if b"\r" in _fixture_path(rel).read_bytes()]
+    assert not converted, f"line endings were converted in: {converted}"

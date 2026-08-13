@@ -22,9 +22,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from sensor_qaqc.instruments.containers import TYPED_CELLS
+
 if TYPE_CHECKING:
+    import re
     from collections.abc import Iterable, Iterator, Mapping, Sequence
 
+    from sensor_qaqc.instruments.containers import CellCoercion
     from sensor_qaqc.instruments.sources import (
         DataTableSpec,
         DetailsTableSpec,
@@ -85,9 +89,12 @@ class ParsedData:
     sample_numbers: tuple[int, ...]
     timestamps: tuple[datetime, ...]
     values: tuple[float, ...]
-    series: str
-    unit: str
-    timezone_label: str
+    # None wherever the header does not declare the fact - a bare CSV states no
+    # unit and no zone, and inventing either is what header_declares exists to
+    # make impossible.
+    series: str | None
+    unit: str | None
+    timezone_label: str | None
     notes: tuple[str, ...]
 
 
@@ -141,7 +148,23 @@ def parse_details(rows: Iterable[Sequence[object]], spec: DetailsTableSpec) -> D
     return DetailsTable(entries=entries, series=series)
 
 
-def _locate(header: Sequence[object], spec: DataTableSpec) -> tuple[int, int, int, str, str, str]:
+@dataclass(frozen=True)
+class _DataColumns:
+    """Where each column is, and what its header declared."""
+
+    number_at: int
+    stamp_at: int
+    value_at: int
+    series: str | None
+    unit: str | None
+    timezone_label: str | None
+
+
+def _capture(matched: re.Match[str], name: str) -> str | None:
+    return str(matched.group(name)) if name in matched.re.groupindex else None
+
+
+def _locate(header: Sequence[object], spec: DataTableSpec) -> _DataColumns:
     """Column positions and what the headers declared, or refuse."""
     headers = [_text(cell) for cell in header]
     stamped = [(i, spec.timestamp_column.match(text)) for i, text in enumerate(headers) if text]
@@ -168,52 +191,62 @@ def _locate(header: Sequence[object], spec: DataTableSpec) -> tuple[int, int, in
                 f"no {spec.sample_number_column!r} column in the header {[h for h in headers if h]}"
             )
         number_at = headers.index(spec.sample_number_column)
-    return (
-        number_at,
-        stamp_at,
-        value_at,
-        str(value_match.group("series")),
-        str(value_match.group("unit")),
-        str(stamp_match.group("timezone")),
+    return _DataColumns(
+        number_at=number_at,
+        stamp_at=stamp_at,
+        value_at=value_at,
+        series=_capture(value_match, "series"),
+        unit=_capture(value_match, "unit"),
+        timezone_label=_capture(stamp_match, "timezone"),
     )
 
 
-def parse_data(rows: Iterable[Sequence[object]], spec: DataTableSpec) -> ParsedData:
+def parse_data(
+    rows: Iterable[Sequence[object]],
+    spec: DataTableSpec,
+    *,
+    cells: CellCoercion = TYPED_CELLS,
+) -> ParsedData:
     """Read the observations, refusing any row that cannot be placed."""
     iterator = iter(rows)
     header = _header(iterator, spec.header_row, "data")
-    number_at, stamp_at, value_at, series, unit, label = _locate(header, spec)
+    columns = _locate(header, spec)
 
     numbers: list[int] = []
     stamps: list[datetime] = []
     values: list[float] = []
     blank = 0
     for offset, row in enumerate(iterator, start=spec.header_row + 1):
-        number = _cell(row, number_at + 1) if number_at >= 0 else None
-        stamp = _cell(row, stamp_at + 1)
-        value = _cell(row, value_at + 1)
+        number = _cell(row, columns.number_at + 1) if columns.number_at >= 0 else None
+        stamp = _cell(row, columns.stamp_at + 1)
+        value = _cell(row, columns.value_at + 1)
         if number is None and stamp is None and value is None:
             blank += 1
             continue
         if stamp is None:
             raise ValueError(f"row {offset} of the data table has a value but no timestamp")
-        stamps.append(_stamp(offset, stamp, "data"))
-        values.append(_value(offset, value))
-        if number_at >= 0:
-            numbers.append(_number(offset, number, numbers))
+        stamps.append(_stamp(offset, stamp, "data", cells))
+        values.append(_value(offset, value, cells))
+        if columns.number_at >= 0:
+            numbers.append(_number(offset, number, numbers, cells))
     notes = (f"{blank} blank rows skipped in the data table",) if blank else ()
     return ParsedData(
         sample_numbers=tuple(numbers),
         timestamps=tuple(stamps),
         values=tuple(values),
-        series=series,
-        unit=unit,
-        timezone_label=label,
+        series=columns.series,
+        unit=columns.unit,
+        timezone_label=columns.timezone_label,
         notes=notes,
     )
 
 
-def parse_events(rows: Iterable[Sequence[object]], spec: EventsTableSpec) -> ParsedEvents:
+def parse_events(
+    rows: Iterable[Sequence[object]],
+    spec: EventsTableSpec,
+    *,
+    cells: CellCoercion = TYPED_CELLS,
+) -> ParsedEvents:
     """Read the event log, discovering its column set from the header.
 
     One column per event type, and only types that occurred - so the columns
@@ -248,7 +281,7 @@ def parse_events(rows: Iterable[Sequence[object]], spec: EventsTableSpec) -> Par
             continue
         if stamp is None:
             raise ValueError(f"row {offset} of the event table marks an event but has no timestamp")
-        when = _stamp(offset, stamp, "event")
+        when = _stamp(offset, stamp, "event", cells)
         if not marked:
             raise ValueError(f"row {offset} of the event table has a timestamp but marks no event")
         for at, mark in marked:
@@ -274,34 +307,53 @@ def _header(iterator: Iterator[Sequence[object]], header_row: int, table: str) -
     raise ValueError(f"the {table} table has no row {header_row} to read a header from")
 
 
-def _stamp(row: int, raw: object, table: str) -> datetime:
-    """Return a cell as a timestamp, refusing anything stored as text."""
-    if not isinstance(raw, datetime):
+def _stamp(row: int, raw: object, table: str, cells: CellCoercion) -> datetime:
+    """Return a cell as a timestamp, in the container's own terms."""
+    try:
+        converted = cells.timestamp(raw)
+    except ValueError as error:
+        raise ValueError(
+            f"row {row} of the {table} table holds {raw!r}, which is not a timestamp in"
+            f" the format this source declares: {error}"
+        ) from error
+    if not isinstance(converted, datetime):
         raise ValueError(  # noqa: TRY004 - a text date is an ambiguous file, not a caller's type error
             f"row {row} of the {table} table holds {raw!r} where a timestamp belongs;"
             " a date the container did not store as a date is ambiguous, not readable"
         )
-    return raw
+    return converted
 
 
-def _value(row: int, raw: object) -> float:
+def _value(row: int, raw: object, cells: CellCoercion) -> float:
     """Return a reading, or NaN where the sample was logged without one."""
     if raw is None:
         return math.nan
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+    return _number_cell(row, raw, cells)
+
+
+def _number_cell(row: int, raw: object, cells: CellCoercion) -> float:
+    """Return a cell as a number; one that is not is a column read wrongly."""
+    try:
+        converted = cells.number(raw)
+    except ValueError as error:
+        raise ValueError(
+            f"row {row} of the data table holds {raw!r} where a number belongs"
+        ) from error
+    if isinstance(converted, bool) or not isinstance(converted, (int, float)):
         # A value cell holding text is a parse that landed in the wrong column,
         # not a caller passing the wrong type - hence ValueError.
         raise ValueError(  # noqa: TRY004
             f"row {row} of the data table holds {raw!r} where a number belongs"
         )
-    return float(raw)
+    return float(converted)
 
 
-def _number(row: int, raw: object, seen: Sequence[int]) -> int:
+def _number(row: int, raw: object, seen: Sequence[int], cells: CellCoercion) -> int:
     """Return the sample number, which must continue the export's own sequence."""
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw != int(raw):
+    counted = _number_cell(row, raw, cells)
+    if counted != int(counted):
         raise ValueError(f"row {row} of the data table holds {raw!r} where a sample number belongs")
-    number = int(raw)
+    number = int(counted)
     if seen and number != seen[-1] + 1:
         raise ValueError(
             f"sample number {number} follows {seen[-1]} at row {row}; the export numbers"
