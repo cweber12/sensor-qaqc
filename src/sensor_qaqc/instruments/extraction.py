@@ -194,6 +194,18 @@ class SourceReader(Protocol):
         ...
 
 
+def outstanding_fields(extraction: Extraction) -> tuple[str, ...]:
+    """Canonical fields this source cannot state, so an operator must.
+
+    What ``inspect`` names rather than asks for: the required facts the source
+    left unsaid, plus the ones no file ever carries. This is the number the
+    PRD's "prompts shrink as extractors improve" claim is measured by, so it
+    is computed from the extraction rather than written down anywhere.
+    """
+    unsaid = tuple(name for name in RESOLVED_REQUIRED if getattr(extraction.metadata, name) is None)
+    return (*unsaid, "variable", *OPERATOR_FIELDS)
+
+
 def _reconcile(
     extraction: Extraction, supplied: SuppliedMetadata
 ) -> tuple[dict[str, Any], dict[str, FieldSource]]:
