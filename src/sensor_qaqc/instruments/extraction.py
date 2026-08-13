@@ -140,6 +140,11 @@ class Extraction:
     checksum gate runs on exactly this, because the Details statistics
     describe everything the logger recorded, not the subset that survives any
     later trim or mask.
+
+    ``notes`` is the channel for anything skipped, empty or unusable: blank
+    rows passed over, a field present but in an unverified format. Without it
+    a reader's only options are to refuse the file or to stay quiet, and
+    staying quiet is how a parse loses something nobody hears about.
     """
 
     format_id: str
@@ -148,6 +153,7 @@ class Extraction:
     metadata: ExtractedMetadata
     published: PublishedStatistics | None = None
     events: tuple[LoggedEvent, ...] = ()
+    notes: tuple[str, ...] = ()
 
 
 class SourceReader(Protocol):

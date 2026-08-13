@@ -71,6 +71,8 @@ class DetailsTableSpec:
     section_column: int
     key_column: int
     value_column: int
+    series_column: int
+    series_prefix: str
 
 
 @dataclass(frozen=True)
@@ -148,6 +150,9 @@ def _details_spec(format_id: str, raw: Mapping[str, object]) -> DetailsTableSpec
     layout = str(raw.get("layout", ""))
     if layout != "key_value":
         raise ValueError(f"{format_id}.details.layout must be 'key_value', got {layout!r}")
+    prefix = str(raw.get("series_prefix", ""))
+    if not prefix.strip():
+        raise ValueError(f"{format_id}.details needs the prefix its series declaration carries")
     return DetailsTableSpec(
         layout=layout,
         section_column=_positive_int(
@@ -155,6 +160,8 @@ def _details_spec(format_id: str, raw: Mapping[str, object]) -> DetailsTableSpec
         ),
         key_column=_positive_int(format_id, "details.key_column", raw.get("key_column")),
         value_column=_positive_int(format_id, "details.value_column", raw.get("value_column")),
+        series_column=_positive_int(format_id, "details.series_column", raw.get("series_column")),
+        series_prefix=prefix,
     )
 
 
