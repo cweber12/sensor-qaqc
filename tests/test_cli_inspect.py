@@ -82,8 +82,18 @@ def test_units_are_reported_as_extracted_and_the_variable_as_nobody_s(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _, out, _ = _run(PRISTINE, capsys)
-    assert "units: degF, extracted" in out
+    assert "units: degF (extracted)" in out
     assert "variable: not stated by any source" in out
+
+
+def test_a_source_that_states_no_unit_says_so_rather_than_calling_it_extracted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, out, _ = _run(_bare_csv(tmp_path / "data.csv"), capsys)
+    assert "units: not stated by this source" in out
+    assert "extracted" not in out.split("units:")[1].splitlines()[0]
+    # A unit belongs to a number: an absent interval carries no "s" either.
+    assert "interval not stated," in out
 
 
 # --- The corrupt copy: the report still prints, and the exit code is 1. ---

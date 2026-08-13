@@ -54,13 +54,11 @@ def render(path: Path, extraction: Extraction, gate_report: str) -> str:
         ),
         (
             f"logging: mode {_or_unstated(metadata.logging_mode)}"
-            f", interval {_or_unstated(metadata.interval_s)} s"
+            f", interval {_with_unit(metadata.interval_s, 's')}"
             f", stamps in {_or_unstated(metadata.source_timezone_label)}"
         ),
-        (
-            "variable: not stated by any source - the operator's to declare"
-            f" (units: {_or_unstated(metadata.units)}, extracted)"
-        ),
+        f"units: {_units(extraction)}",
+        "variable: not stated by any source - the operator's to declare",
         f"position: {_position(extraction)}",
         *_span(extraction),
         f"events: {_events(extraction)}",
@@ -76,6 +74,19 @@ def render(path: Path, extraction: Extraction, gate_report: str) -> str:
 
 def _or_unstated(value: object) -> str:
     return "not stated" if value is None else str(value)
+
+
+def _with_unit(value: object, unit: str) -> str:
+    """Return the value with its unit; an absent value carries none."""
+    return "not stated" if value is None else f"{value} {unit}"
+
+
+def _units(extraction: Extraction) -> str:
+    """Naming the source matters here: it decides who has to know the scale."""
+    units = extraction.metadata.units
+    if units is None:
+        return "not stated by this source - the operator's to supply, never guessed"
+    return f"{units} (extracted)"
 
 
 def _position(extraction: Extraction) -> str:
