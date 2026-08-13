@@ -24,7 +24,16 @@ EOL_CANARY = "tests/data/eol_canary.csv"
 # `-text` in .gitattributes, so both belong here.
 FIXTURES = {
     EOL_CANARY: "31c85a59383f17971b1a0842e220f089634a9bc3f0e59706cffe35273f682309",
+    # The pristine HOBOconnect export: all 3,029 samples, and the Details
+    # statistics reproduce from the Data sheet (#3 acceptance).
     "docs/data/yellow_buoy_temps.xlsx": (
+        "e5f6676e8636273f1ba4aeafa7cc533c439511390ca7d36f9fed6b8b55081efc"
+    ),
+    # A Google Sheets round-trip of the HOBOconnect export with the seven
+    # out-of-water samples trimmed, so its Data sheet no longer reproduces
+    # its own Details statistics (#3 audit, 2026-08-12). Kept as the
+    # real-world corrupt case the ingest checksum gate must refuse.
+    "tests/data/yellow_buoy_temps_edited.xlsx": (
         "9b6294534e13dd88aec674cccb99d0b53201ebf9bce955fe3d25811dd3e9f55e"
     ),
 }
