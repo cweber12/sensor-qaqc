@@ -41,13 +41,14 @@ import hashlib
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import cached_property
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from sensor_qaqc.core.records import RecordView
 
@@ -161,12 +162,17 @@ def red_noise(seed: int, n: int = BATTERY_SAMPLES, dt: timedelta = BATTERY_DT) -
     return _record(BASELINE_DEGC + x, dt)
 
 
-NEGATIVE_CONTROLS: dict[str, Callable[[int], SyntheticRecord]] = {
-    "white_noise": white_noise,
-    "flatline": flatline,
-    "ramp": ramp,
-    "quantised": quantised,
-}
+# Read-only on purpose (B4 on #22): as a plain dict, one .pop() silently
+# shrank every subsequent battery run - the runtime count guard lives in
+# battery.negative_controls, but the mapping itself must also refuse.
+NEGATIVE_CONTROLS: Mapping[str, Callable[[int], SyntheticRecord]] = MappingProxyType(
+    {
+        "white_noise": white_noise,
+        "flatline": flatline,
+        "ramp": ramp,
+        "quantised": quantised,
+    }
+)
 
 
 def decimate(record: RecordView, factor: int) -> SyntheticRecord:

@@ -129,6 +129,48 @@ def test_a_bound_cannot_be_declared_without_provenance() -> None:
         _bound().provenance.__class__(source="", rationale="")
 
 
+@dataclass(frozen=True)
+class ControllessCheck:
+    """Everything a check must declare - except the positive control (B5 on #22)."""
+
+    check_id: str = "controlless"
+    domain: Domain = Domain.INTEGRITY
+    channel: Channel = Channel.SPECTRAL
+    requirements: tuple[Requirement, ...] = ()
+    false_alarm_bound: Threshold = field(default_factory=_bound)
+    provides: tuple[str, ...] = ()
+    consumes: tuple[str, ...] = ()
+
+    def compute(
+        self,
+        record: RecordView,  # noqa: ARG002 - fake
+        thresholds: Mapping[str, ThresholdLike],  # noqa: ARG002 - fake
+        capabilities: Mapping[str, object],  # noqa: ARG002 - fake
+    ) -> CheckResult:
+        return CheckResult(verdict=Verdict.PASS)
+
+
+def test_a_check_without_a_positive_control_is_refused_at_registration() -> None:
+    # Confirmed live (B5 on #22, activity A's F2): this registered cleanly
+    # and died later as a raw AttributeError inside the battery. The audit
+    # resolution on #2 puts the demand at the gate: registration requires
+    # a seeded positive-control generator.
+    with pytest.raises(RegistrationError, match=r"'controlless'.*positive_control"):
+        Registry().register(ControllessCheck())  # type: ignore[arg-type]
+
+
+def test_a_non_callable_positive_control_is_refused_at_registration() -> None:
+    # Present but not callable is the same defect wearing a type: the
+    # battery could not seed a record from it.
+    @dataclass(frozen=True)
+    class ControlAsData(ControllessCheck):
+        check_id: str = "control_as_data"
+        positive_control: object = None
+
+    with pytest.raises(RegistrationError, match=r"'control_as_data'.*positive_control"):
+        Registry().register(ControlAsData())  # type: ignore[arg-type]
+
+
 def test_exactly_one_check_may_provide_a_capability() -> None:
     registry = Registry()
     registry.register(FakeCheck(check_id="spectral_slope", provides=("spectral_estimate",)))
