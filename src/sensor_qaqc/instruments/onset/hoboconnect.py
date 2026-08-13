@@ -29,14 +29,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import openpyxl
 
-from sensor_qaqc.core.records import EventType, LoggedEvent, LoggingMode
+from sensor_qaqc.core.records import EventType, LoggingMode
 from sensor_qaqc.instruments.extraction import (
     ExtractedMetadata,
     Extraction,
     PublishedStatistics,
+    SourceEvent,
 )
 from sensor_qaqc.instruments.tables import parse_data, parse_details, parse_events
-from sensor_qaqc.instruments.timezones import to_utc
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -104,7 +104,7 @@ class HOBOconnectReader:
         events = self._events(logged, data.timezone_label, notes)
         return Extraction(
             format_id=self.format_id,
-            timestamps=to_utc(data.timestamps, data.timezone_label),
+            timestamps=data.timestamps,
             values=np.asarray(data.values, dtype=np.float64),
             metadata=self._metadata(details, units, data.timezone_label, notes),
             published=published,
@@ -114,7 +114,7 @@ class HOBOconnectReader:
 
     def _events(
         self, logged: ParsedEvents | None, label: str, notes: list[str]
-    ) -> tuple[LoggedEvent, ...]:
+    ) -> tuple[SourceEvent, ...]:
         """Normalise the log's column names into the canonical vocabulary."""
         if logged is None:
             return ()
@@ -125,10 +125,8 @@ class HOBOconnectReader:
                 " shift the log against the samples"
             )
         notes.extend(logged.notes)
-        stamps = to_utc([event.at for event in logged.events], label) if logged.events else []
         return tuple(
-            LoggedEvent(at=when, event_type=_event_type(event.label))
-            for event, when in zip(logged.events, stamps, strict=True)
+            SourceEvent(at=event.at, event_type=_event_type(event.label)) for event in logged.events
         )
 
     def _rows(self, workbook: openpyxl.Workbook, table: str) -> list[Sequence[object]]:
@@ -274,7 +272,7 @@ def _logging_mode(raw: str) -> LoggingMode:
     return LOGGING_MODES[mode]
 
 
-def _sample_time(raw: str, label: str) -> object:
+def _sample_time(raw: str, label: str) -> datetime:
     stamp, _, declared = raw.rpartition(" ")
     if declared != label:
         raise ValueError(
@@ -282,7 +280,8 @@ def _sample_time(raw: str, label: str) -> object:
             f" header declares {label!r}; the export states the zone twice and they disagree"
         )
     try:
-        naive = datetime.strptime(stamp, DETAILS_TIME)  # noqa: DTZ007 - naive local by construction; the label is checked above and applied by to_utc
+        # Naive local by construction: the label is checked above, and
+        # assemble is where a local stamp becomes UTC.
+        return datetime.strptime(stamp, DETAILS_TIME)  # noqa: DTZ007
     except ValueError as error:
         raise ValueError(f"the published sample time {raw!r} is not a readable stamp") from error
-    return to_utc([naive], label)[0]

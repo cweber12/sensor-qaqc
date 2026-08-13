@@ -8,18 +8,20 @@ No reader exists yet; a stub stands in, which is the point.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from sensor_qaqc.core.records import EventType, FieldSource, LoggedEvent, LoggingMode
+from sensor_qaqc.core.records import EventType, FieldSource, LoggingMode
 from sensor_qaqc.instruments.extraction import (
     ConflictingMetadataError,
     ExtractedMetadata,
     Extraction,
     IncompleteRecordError,
+    SourceEvent,
     SourceReader,
     SuppliedMetadata,
     assemble,
@@ -29,7 +31,10 @@ from sensor_qaqc.instruments.sensors import MissingSensorError, parse_sensor_cat
 if TYPE_CHECKING:
     from pathlib import Path
 
-START = pd.Timestamp("2026-07-11T14:00:00Z")
+# The source's own frame (PDT) on the left, what assemble must produce on the
+# right: localisation is the seam's job, not the reader's.
+LOCAL_START = datetime(2026, 7, 11, 7, 0)  # noqa: DTZ001 - naive local, as a source states it
+UTC_START = pd.Timestamp("2026-07-11T14:00:00Z")
 INTERVAL_S = 600
 SENSORS = parse_sensor_catalogue(
     "sensors:\n"
@@ -41,16 +46,19 @@ SENSORS = parse_sensor_catalogue(
 )
 
 
+def _local(n: int, *, step: int = INTERVAL_S) -> tuple[datetime, ...]:
+    return tuple(LOCAL_START + timedelta(seconds=step * k) for k in range(n))
+
+
 def _extraction(
     metadata: ExtractedMetadata | None = None,
     *,
     n: int = 4,
-    events: tuple[LoggedEvent, ...] = (),
+    events: tuple[SourceEvent, ...] = (),
 ) -> Extraction:
-    index = pd.date_range(START, periods=n, freq=pd.Timedelta(seconds=INTERVAL_S), tz="UTC")
     return Extraction(
         format_id="stub",
-        timestamps=index,
+        timestamps=_local(n),
         values=np.arange(n, dtype=float),
         metadata=metadata if metadata is not None else _extracted(),
         events=events,
@@ -101,25 +109,29 @@ def test_assembly_records_which_fields_were_read_and_which_were_typed() -> None:
 
 
 def test_the_series_arrives_on_the_grid_with_its_gaps_in_place() -> None:
-    index = pd.DatetimeIndex([START, START + pd.Timedelta(seconds=2 * INTERVAL_S)])
+    stamps = (LOCAL_START, LOCAL_START + timedelta(seconds=2 * INTERVAL_S))
     extraction = Extraction(
         format_id="stub",
-        timestamps=index,
+        timestamps=stamps,
         values=np.array([70.1, 70.3]),
         metadata=_extracted(),
     )
     record = assemble(extraction, _supplied(), sensors=SENSORS)
-    assert len(record.series) == len(index) + 1
-    assert record.n_valid == len(index)
+    assert len(record.series) == len(stamps) + 1
+    assert record.n_valid == len(stamps)
     assert record.gap_fraction == pytest.approx(1 / 3)
+    assert record.series.index[0] == UTC_START
 
 
-def test_events_are_carried_through_without_judgement() -> None:
+def test_events_are_carried_through_and_localised_with_the_samples() -> None:
     # Ingest surfaces the audit trail; what an event means for a verdict is
-    # #7's decision, with an injected policy (#3 amendments).
-    event = LoggedEvent(at=START, event_type=EventType.STARTED)
+    # #7's decision, with an injected policy (#3 amendments). The log is
+    # resolved with the same label as the samples - two frames in one record
+    # would shift the events against the series they explain.
+    event = SourceEvent(at=LOCAL_START, event_type=EventType.STARTED)
     record = assemble(_extraction(events=(event,)), _supplied(), sensors=SENSORS)
-    assert record.events == (event,)
+    assert [logged.event_type for logged in record.events] == [EventType.STARTED]
+    assert record.events[0].at == UTC_START
 
 
 def test_a_source_that_publishes_no_statistics_still_assembles() -> None:
