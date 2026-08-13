@@ -19,6 +19,7 @@ would do, it is not doing its job.
 | [0004](0004-version-and-provenance.md) | Static version; git state recorded separately | Accepted 2026-08-11, extended by #4 |
 | [0005](0005-dependency-policy.md) | Dependency policy: `pyproject.toml` is the sole declaration | Accepted 2026-08-11 |
 | [0006](0006-conformance-battery.md) | The conformance battery is two-tiered and is the FAR bound's provenance | Accepted 2026-08-12 |
+| [0007](0007-canonical-record.md) | The canonical record: native units, a grid that refuses, provenance per field | Accepted 2026-08-12 |
 
 ## 0003 was never issued
 
