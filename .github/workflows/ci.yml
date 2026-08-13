@@ -72,7 +72,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - run: uv build
       - run: uvx twine check dist/*
-      - name: assert the wheel ships py.typed, layers.toml and check_ids.txt
+      - name: assert the wheel ships every package data file
         run: |
           python - <<'EOF'
           import glob
@@ -85,6 +85,8 @@ jobs:
               "sensor_qaqc/py.typed",
               "sensor_qaqc/layers.toml",
               "sensor_qaqc/check_ids.txt",
+              "sensor_qaqc/instruments/sources.yaml",
+              "sensor_qaqc/instruments/sensors.yaml",
           )
           missing = [n for n in required if n not in names]
           sys.exit(f"missing from wheel: {missing}" if missing else 0)
@@ -94,6 +96,18 @@ jobs:
           uv venv "$RUNNER_TEMP/smoke"
           uv pip install --python "$RUNNER_TEMP/smoke/bin/python" dist/*.whl
           "$RUNNER_TEMP/smoke/bin/sensor-qaqc" --help
+      - name: load the catalogues from the installed wheel
+        # Shipping the files is not the same as being able to read them: a
+        # loader reaching through a path relative to __file__ works in a
+        # source checkout and fails here, where a user meets it first (#3).
+        run: |
+          "$RUNNER_TEMP/smoke/bin/python" - <<'EOF'
+          from sensor_qaqc.instruments.sensors import load_sensor_catalogue
+          from sensor_qaqc.instruments.sources import load_source_catalogue
+
+          print(sorted(load_sensor_catalogue().products))
+          print(sorted(load_source_catalogue().formats))
+          EOF
 
   ci-ok:
     # Fan-in for branch protection: main requires this one context instead of

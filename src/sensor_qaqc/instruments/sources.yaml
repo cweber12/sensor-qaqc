@@ -1,0 +1,53 @@
+# File-shape adapters, keyed by export format. Package data, read through
+# package resources (#3).
+#
+# This file says where the timestamp, the value, the unit and the event log
+# live. It says nothing about physics: no thresholds, no ranges, no units
+# vocabulary - that is sensors.yaml's, and thresholds are injected into checks
+# rather than read from anywhere here.
+#
+# A source is *tables*, not a file: a data table, an optional events table and
+# an optional details table, living in the sheets of one workbook or in sibling
+# files. `tables` maps the canonical table name onto where that container keeps
+# it (#3 plan amendment).
+#
+# Every entry here is verified against a real export before it lands. The
+# hoboconnect_xlsx entry was read off the pristine HOBOconnect export in
+# docs/data/ (SHA-256 e5f6676e...). A generic CSV entry arrives with the
+# adapter that reads one.
+
+formats:
+  hoboconnect_xlsx:
+    description: >-
+      HOBOconnect workbook export, one series per file. Written by Essential
+      XlsIO; the Data sheet holds an int sample number, a naive Excel serial
+      timestamp whose zone is declared only in the column header, and the
+      value, whose unit is declared only in the column header.
+    container: xlsx
+    tables:
+      data: Data
+      events: Events
+      details: Details
+    data:
+      header_row: 1
+      sample_number_column: '#'
+      # The zone label is captured, never assumed: "PDT" is an abbreviation,
+      # not a zone, and the record keeps the export's own declaration.
+      timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
+      # "Tidbit 1 , °F" - the series name and the unit, separated by " , ".
+      value_column: '^(?P<series>.+) , (?P<unit>.+)$'
+    events:
+      header_row: 1
+      timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
+      # One column per event type, and only types that occurred appear, so the
+      # column set is dynamic: a fixed-position parser would read the wrong
+      # column on any export whose log differs from this one.
+      dynamic_columns: true
+      marker: Logged
+    details:
+      # Key/value rows under section headers, one column each. Positions are
+      # 1-based, so the same numbers address a workbook column or a CSV field.
+      layout: key_value
+      section_column: 2
+      key_column: 3
+      value_column: 4

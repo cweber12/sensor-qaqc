@@ -1,0 +1,30 @@
+# Datasheet facts, keyed by product model. Package data, read through package
+# resources (#3).
+#
+# Every value carries its citation: `source` says where the number came from,
+# `rationale` says why this value. The loader refuses a fact without both, and
+# refuses a fact name it does not read - a datasheet number sitting here unread
+# is a number nobody verified, wearing the authority of the file it sits in
+# (ADR 0005 discipline, applied to data). Resolution, accuracy and operating
+# range therefore arrive with the #7 checks that read them, not before.
+#
+# This file says nothing about deployments. What a logger was attached to,
+# how deep, and in what medium are the operator's to supply (#3).
+
+sensors:
+  MX2204:
+    native_units:
+      value: [degF, degC]
+      source: >-
+        HOBO TidbiT MX Temp 400 (MX2203) and Temp 5000 (MX2204) Logger Manual,
+        Onset Computer Corporation, doc. 21537-N (2017-2022), section
+        "Specifications": every temperature specification is stated in both
+        degC and degF, and HOBOconnect exports in whichever unit the readout
+        selected. Verified against the export in docs/data/, whose Data header
+        reads "Tidbit 1 , degF".
+      rationale: >-
+        UDUNITS-2 symbols for the two units this product can report. The set
+        exists so an export declaring anything else is refused at ingest rather
+        than accepted and silently mis-scaled: a degC threshold compared
+        against a degF series is off by a factor no downstream check would
+        recognise as a unit error.

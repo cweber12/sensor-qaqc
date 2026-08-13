@@ -20,7 +20,8 @@ third_party = ["numpy", "pandas", "jinja2", "matplotlib", "yaml"]
 
 [layers.instruments]
 layers = ["core"]
-third_party = ["numpy", "pandas", "openpyxl"]
+# yaml: the sources.yaml/sensors.yaml catalogues this layer owns (#3).
+third_party = ["numpy", "pandas", "openpyxl", "yaml"]
 
 [layers.marine]
 layers = ["core", "instruments"]

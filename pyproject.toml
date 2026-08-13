@@ -38,6 +38,11 @@ dependencies = [
   # offset aliases ("6min", "h"), which the battery's decimation ladder
   # resamples with (reason recorded in #1).
   "pandas>=2.2",
+  # First import: instruments/sources.py and instruments/sensors.py read the
+  # format and datasheet catalogues, which are YAML because a human edits
+  # them. Bare name, no floor: only safe_load is used, and it has been in
+  # PyYAML since 3.x (ADR 0005 - a floor would be a number without a reason).
+  "pyyaml",
 ]
 scripts.sensor-qaqc = "sensor_qaqc.cli.__main__:main"
 
@@ -49,6 +54,9 @@ dev = [
   "pre-commit",
   "pytest",
   "ruff",
+  # PyYAML ships no py.typed; without stubs the yaml import is Any and mypy
+  # strict stops checking every catalogue parse.
+  "types-pyyaml",
   # In the venv so scripts/gate.py's build row runs via `python -m uv` with
   # nothing on PATH beyond what `uv sync` itself provides.
   "uv",
