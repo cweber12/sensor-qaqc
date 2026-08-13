@@ -27,6 +27,13 @@ FIXTURES = {
     "docs/data/yellow_buoy_temps.xlsx": (
         "9b6294534e13dd88aec674cccb99d0b53201ebf9bce955fe3d25811dd3e9f55e"
     ),
+    # A Google Sheets round-trip of the HOBOconnect export with the seven
+    # out-of-water samples trimmed, so its Data sheet no longer reproduces
+    # its own Details statistics (#3 audit, 2026-08-12). Kept as the
+    # real-world corrupt case the ingest checksum gate must refuse.
+    "tests/data/yellow_buoy_temps_edited.xlsx": (
+        "9b6294534e13dd88aec674cccb99d0b53201ebf9bce955fe3d25811dd3e9f55e"
+    ),
 }
 
 
