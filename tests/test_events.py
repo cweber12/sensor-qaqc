@@ -71,8 +71,9 @@ def test_the_pristine_log_is_read_end_to_end_in_file_order() -> None:
 def test_an_event_from_before_the_first_sample_is_kept() -> None:
     # The launch connection is 2026-07-10 15:26 PDT, the day before logging
     # started. Constraining events to the sample span would discard it.
+    # Read in the source's frame; assemble is what makes it UTC.
     first = _events(PRISTINE)[0]
-    assert first == ("host_connected", "2026-07-10 22:26:47+00:00")
+    assert first == ("host_connected", "2026-07-10 15:26:47")
 
 
 def test_the_log_reaches_the_last_sample() -> None:
@@ -80,7 +81,7 @@ def test_the_log_reaches_the_last_sample() -> None:
     # rather than truncated - the "exactly 1,000 rows" scare was the Google
     # Sheets grid in the edited copy, not an export limit.
     name, when = _events(PRISTINE)[-1]
-    assert (name, when) == ("end_of_file", "2026-08-01 14:40:00+00:00")
+    assert (name, when) == ("end_of_file", "2026-08-01 07:40:00")
 
 
 def test_the_assembled_record_carries_the_log() -> None:

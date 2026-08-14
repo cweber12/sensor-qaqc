@@ -2,10 +2,11 @@
 
 A reader's whole job is to produce an :class:`Extraction` - the raw parse, the
 metadata the file states, the statistics the format publishes (if any) and the
-event log. Everything about *becoming* a canonical record happens once, in
-:func:`assemble`: the grid, the unit check, and the provenance mapping. That is
-what makes "adding a format touches only the adapter layer" true rather than
-aspirational, and it is why the canonical schema - not the CLI - is the contract.
+event log, all in the source's own terms. Everything about *becoming* a
+canonical record happens once, in :func:`assemble`: localising the timestamps,
+the grid, the unit check, and the provenance mapping. That is what makes
+"adding a format touches only the adapter layer" true rather than aspirational,
+and it is why the canonical schema - not the CLI - is the contract.
 
 **Where a value may come from.** #3 splits metadata three ways and this module
 encodes the split as types rather than as a convention:
@@ -35,13 +36,16 @@ from typing import TYPE_CHECKING, Any, Protocol
 from sensor_qaqc.core.records import (
     OPERATOR_FIELDS,
     CanonicalRecord,
+    EventType,
     FieldSource,
     LoggedEvent,
     LoggingMode,
     to_uniform_grid,
 )
+from sensor_qaqc.instruments.timezones import to_utc
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from pathlib import Path
 
     import numpy as np
@@ -86,8 +90,10 @@ class PublishedStatistics:
     minimum: float
     average: float
     std_dev: float
-    first_sample_time: pd.Timestamp
-    last_sample_time: pd.Timestamp
+    # In the source's own frame, like every other stamp on an Extraction: the
+    # gate compares them against the parse without either side being moved.
+    first_sample_time: datetime
+    last_sample_time: datetime
     units: str
 
 
@@ -133,6 +139,19 @@ class SuppliedMetadata:
 
 
 @dataclass(frozen=True)
+class SourceEvent:
+    """One event the source logged, in canonical terms and its own frame.
+
+    The type is canonical because normalising vendor words is the reader's
+    job; the timestamp is not yet UTC because resolving a declared local label
+    needs the label, which for some formats only an operator can give.
+    """
+
+    at: datetime
+    event_type: EventType
+
+
+@dataclass(frozen=True)
 class Extraction:
     """One source, parsed: the raw samples and everything the file said.
 
@@ -141,6 +160,12 @@ class Extraction:
     describe everything the logger recorded, not the subset that survives any
     later trim or mask.
 
+    **Timestamps stay in the source's own frame**: naive local, with the label
+    the source declared carried separately on the metadata. A bare CSV states
+    no zone at all, so its label is supplied - and supplied metadata does not
+    exist yet when a reader runs. Localising in :func:`assemble` is therefore
+    not a preference but the only place both halves are in hand.
+
     ``notes`` is the channel for anything skipped, empty or unusable: blank
     rows passed over, a field present but in an unverified format. Without it
     a reader's only options are to refuse the file or to stay quiet, and
@@ -148,11 +173,11 @@ class Extraction:
     """
 
     format_id: str
-    timestamps: pd.DatetimeIndex
+    timestamps: tuple[datetime, ...]
     values: npt.NDArray[np.float64]
     metadata: ExtractedMetadata
     published: PublishedStatistics | None = None
-    events: tuple[LoggedEvent, ...] = ()
+    events: tuple[SourceEvent, ...] = ()
     notes: tuple[str, ...] = ()
 
 
@@ -167,6 +192,18 @@ class SourceReader(Protocol):
     def read(self, path: Path) -> Extraction:
         """Parse the source's tables. Never trims, masks or converts units."""
         ...
+
+
+def outstanding_fields(extraction: Extraction) -> tuple[str, ...]:
+    """Canonical fields this source cannot state, so an operator must.
+
+    What ``inspect`` names rather than asks for: the required facts the source
+    left unsaid, plus the ones no file ever carries. This is the number the
+    PRD's "prompts shrink as extractors improve" claim is measured by, so it
+    is computed from the extraction rather than written down anywhere.
+    """
+    unsaid = tuple(name for name in RESOLVED_REQUIRED if getattr(extraction.metadata, name) is None)
+    return (*unsaid, "variable", *OPERATOR_FIELDS)
 
 
 def _reconcile(
@@ -248,9 +285,19 @@ def assemble(
             f"the source declares {resolved['units']!r}, which {spec.product} does not"
             f" report; sensors.yaml lists: {known}. Refusing to guess the scale."
         )
+    label = resolved["source_timezone_label"]
     series = to_uniform_grid(
-        extraction.timestamps, extraction.values, interval_s=resolved["interval_s"]
+        to_utc(extraction.timestamps, label),
+        extraction.values,
+        interval_s=resolved["interval_s"],
     )
+    events = to_utc([event.at for event in extraction.events], label) if extraction.events else []
     return CanonicalRecord(
-        series=series, events=extraction.events, provenance=provenance, **resolved
+        series=series,
+        events=tuple(
+            LoggedEvent(at=when, event_type=event.event_type)
+            for event, when in zip(extraction.events, events, strict=True)
+        ),
+        provenance=provenance,
+        **resolved,
     )

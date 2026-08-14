@@ -36,6 +36,10 @@ formats:
       timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
       # "Tidbit 1 , °F" - the series name and the unit, separated by " , ".
       value_column: '^(?P<series>.+) , (?P<unit>.+)$'
+      # What the header states for itself. Checked against the patterns above,
+      # so a format cannot claim a fact it does not capture - or capture one
+      # it did not declare, which would extract a value nobody reviewed.
+      header_declares: [timezone, unit]
     events:
       header_row: 1
       sample_number_column: '#'
@@ -58,3 +62,63 @@ formats:
       # states twice - and so a free checksum on unit handling.
       series_column: 1
       series_prefix: 'Series : '
+
+  hoboconnect_sheets_csv:
+    description: >-
+      The three sheets of a HOBOconnect workbook written out as sibling CSV
+      files - what a spreadsheet's "export as CSV" produces, one file per
+      table. The tables are the same tables, so the shapes below are the same
+      shapes. This is NOT HOBOconnect's own CSV export: nobody here has an
+      app to produce one, so that format is TODO(verify) and would arrive as
+      its own entry once a real sample exists.
+    container: csv
+    # Every stamp in a CSV is text, so the format that reads it is declared
+    # rather than inferred. Guessing at a date format is how a day becomes a
+    # month for the twelve days of the year where both parse.
+    timestamp_format: '%Y-%m-%d %H:%M:%S'
+    tables:
+      data: data.csv
+      events: events.csv
+      details: details.csv
+    data:
+      header_row: 1
+      sample_number_column: '#'
+      timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
+      value_column: '^(?P<series>.+) , (?P<unit>.+)$'
+      header_declares: [timezone, unit]
+    events:
+      header_row: 1
+      sample_number_column: '#'
+      timestamp_column: '^Date-Time \((?P<timezone>.+)\)$'
+      dynamic_columns: true
+      marker: Logged
+    details:
+      layout: key_value
+      section_column: 2
+      key_column: 3
+      value_column: 4
+      series_column: 1
+      series_prefix: 'Series : '
+
+  generic_csv:
+    description: >-
+      A single-series CSV with no vendor metadata: one column named
+      "timestamp" and one named "value". The convention is this tool's own,
+      not a vendor's - which is the point. A bare CSV asserts nothing, so the
+      unit, the zone label, the logging interval and the logger's identity are
+      all supplied by an operator and none of them are guessed. Publishing no
+      statistics, it also gets no checksum gate, and ingest says so rather
+      than letting silence read as a pass.
+    container: csv
+    timestamp_format: '%Y-%m-%dT%H:%M:%S'
+    tables:
+      data: data.csv
+    data:
+      header_row: 1
+      # No sample numbering to check against: a bare CSV has no vendor
+      # sequence, so a row removed from the middle is undetectable here. That
+      # is a real cost of the format, not an oversight.
+      sample_number_column: ''
+      timestamp_column: '^timestamp$'
+      value_column: '^value$'
+      header_declares: []

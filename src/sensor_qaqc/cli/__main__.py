@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from sensor_qaqc.cli import checks_commands
+from sensor_qaqc.cli import checks_commands, inspect_command
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -100,7 +100,13 @@ def _add_inspect(sub: _Subparsers[_Parser]) -> None:
     # sensor_deployments.yaml entry exists; run requires one. Same ingest
     # function, different preconditions (#1).
     inspect = _leaf(sub, "inspect", "parse a sensor export and report what it contains (#3)")
-    inspect.add_argument("file", type=Path, metavar="<file>", help="sensor export file")
+    inspect.add_argument(
+        "file",
+        type=Path,
+        metavar="<file>",
+        help="sensor export: a workbook, a CSV, or a directory of CSV tables",
+    )
+    inspect.set_defaults(func=inspect_command.inspect_command)
 
 
 def _add_run(sub: _Subparsers[_Parser]) -> None:

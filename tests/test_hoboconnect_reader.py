@@ -41,8 +41,10 @@ DEPLOYMENT_NUMBER = 3
 INTERVAL_S = 600
 FOUR_ROWS = 4
 EDITED_SAMPLES = 3022
+# The reader reports the source's own frame; assemble is what makes it UTC.
+FIRST_LOCAL = datetime(2026, 7, 11, 7, 0)  # noqa: DTZ001 - naive local, as the sheet stores it
+LAST_LOCAL = datetime(2026, 8, 1, 7, 40)  # noqa: DTZ001 - naive local, as the sheet stores it
 FIRST_UTC = pd.Timestamp("2026-07-11T14:00:00Z")
-LAST_UTC = pd.Timestamp("2026-08-01T14:40:00Z")
 
 
 def _reader() -> HOBOconnectReader:
@@ -64,8 +66,8 @@ def _samples(n: int, *, start: datetime | None = None) -> list[tuple[datetime, f
 def test_the_reader_finds_every_sample_the_details_sheet_claims() -> None:
     extraction = _read(PRISTINE)
     assert len(extraction.timestamps) == PRISTINE_SAMPLES
-    assert extraction.timestamps[0] == FIRST_UTC
-    assert extraction.timestamps[-1] == LAST_UTC
+    assert extraction.timestamps[0] == FIRST_LOCAL
+    assert extraction.timestamps[-1] == LAST_LOCAL
 
 
 def test_the_unit_and_the_zone_label_are_read_off_the_header() -> None:
@@ -101,8 +103,8 @@ def test_the_published_statistics_are_carried_verbatim() -> None:
     assert published.minimum == pytest.approx(58.60)
     assert published.average == pytest.approx(70.84)
     assert published.std_dev == pytest.approx(2.38)
-    assert published.first_sample_time == FIRST_UTC
-    assert published.last_sample_time == LAST_UTC
+    assert published.first_sample_time == FIRST_LOCAL
+    assert published.last_sample_time == LAST_LOCAL
     assert published.units == "degF"
 
 
@@ -178,12 +180,19 @@ def test_a_row_with_a_timestamp_but_no_value_is_a_gap_not_an_error(tmp_path: Pat
     assert math.isnan(readings[1])
 
 
-def test_a_zone_label_the_reader_cannot_resolve_refuses(tmp_path: Path) -> None:
-    # "PDT" is an abbreviation, not a zone. The reader resolves only labels it
-    # can defend, and says so rather than assuming an offset.
+def test_a_zone_label_nothing_can_resolve_refuses_at_assembly(tmp_path: Path) -> None:
+    # "PDT" is an abbreviation, not a zone. The reader reports whatever label
+    # the header declared - that is what the file says - and assembly is where
+    # a label must resolve to an offset or refuse. Nothing assumes one.
     path = write_workbook(tmp_path / "zone.xlsx", _samples(3), zone="XYZ")
+    extraction = _read(path)
+    assert extraction.metadata.source_timezone_label == "XYZ"
     with pytest.raises(LookupError, match=r"'XYZ'.*PDT"):
-        _read(path)
+        assemble(
+            extraction,
+            SuppliedMetadata(variable="sea_water_temperature"),
+            sensors=load_sensor_catalogue(),
+        )
 
 
 def test_a_logging_mode_the_vocabulary_does_not_have_refuses(tmp_path: Path) -> None:

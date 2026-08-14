@@ -1,0 +1,39 @@
+Details,,,
+Devices,,,
+,App Info,,
+,,App Name,HOBOconnect
+,,Version,2.11.0 (1783017847)
+,Device Info,,
+,,Product,MX2204
+,,Serial Number,22506632
+,,Firmware Version,62.140
+,,Manufacturer,Onset Computer Corporation
+,,Device Memory,176128
+,,Header Created,2026/07/10 15:26:37 PDT
+,Deployment Info,,
+,,Name,Tidbit 1 (22506632)
+,,Location,Off
+,,Group Name,NA
+,,Deployment Number,3
+,,Never Stop (Overwrites Old Data) Enabled,No
+,,Configure Date,2026/07/10 15:26:37 PDT
+,,Logging Interval,0 hour 10 minutes 0 seconds
+,,Logging Mode,Fixed - Normal
+,,Start Logging,On Date/Time 2026/07/11 07:00:00 PDT
+,,Stop Logging,Stop When Memory Fills 
+,,Show Visual Alarms Until,Sensors In Limits
+,,Show LED,On
+,,Bluetooth Always On,On
+,,Upload Data Via,Off
+"Series : Tidbit 1 , °F",,,
+,Alarm Settings,,
+,,High Alarm Value,Not Configured
+,,Low Alarm Value,Not Configured
+,Series Statistics,,
+,,Samples,3029
+,,Max,75.35
+,,Min,58.60
+,,Avg,70.84
+,,Std Dev,2.38
+,,First Sample Time,2026/07/11 07:00:00 PDT
+,,Last Sample Time,2026/08/01 07:40:00 PDT

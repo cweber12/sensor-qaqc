@@ -16,8 +16,16 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
+      # Both rewrite files in place, which is wrong for a fixture whose bytes
+      # are the test. `Stop When Memory Fills ` carries a trailing space in
+      # Onset's own export - stripping it silently deletes the quirk the
+      # reader is tested against, and only tests/test_fixture_hashes.py
+      # noticed. Fixture directories are byte-exact by .gitattributes (-text)
+      # for the same reason; these hooks have to respect that too.
       - id: end-of-file-fixer
+        exclude: ^(tests|docs)/data/
       - id: trailing-whitespace
+        exclude: ^(tests|docs)/data/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.2

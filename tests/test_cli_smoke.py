@@ -29,7 +29,7 @@ LEAF_COMMANDS = [
     ["stations", "show", "scripps-pier"],
     ["baseline", "build", "--site", "la-jolla", "--from", "2026-06-01", "--to", "2026-07-01"],
     ["baseline", "show", "la-jolla"],
-    ["inspect", "export.xlsx"],
+    # inspect gained a body in #3; tests/test_cli_inspect.py owns it now.
     ["run", "12345678-1"],
     ["run", "12345678-1", "--check", "quantisation", "--check", "spectral_slope"],
     ["report", "render", "runs/2026-08-11-12345678-1"],

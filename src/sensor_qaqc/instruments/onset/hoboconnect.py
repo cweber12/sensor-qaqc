@@ -9,9 +9,11 @@ was mistaken for an export is kept as a corrupt fixture and taught nothing.
 
 This module owns Onset's vocabulary and nothing else: ``Fixed - Normal``
 becomes ``fixed``, ``0 hour 10 minutes 0 seconds`` becomes ``600``, ``°F``
-becomes the UDUNITS-2 symbol ``degF``. Table shape comes from ``sources.yaml``
-and generic row parsing from ``tables``, so a second workbook vendor reuses
-both without inheriting these words.
+becomes the UDUNITS-2 symbol ``degF``. Table shape comes from ``sources.yaml``,
+generic row parsing from ``tables`` and the container from ``containers`` - so
+this reader serves the workbook and the same three tables written out as CSV
+files without knowing which it is reading, and a second vendor with the same
+table shapes reuses everything but these words.
 
 Two facts the export states twice are checked against each other, because
 agreement is free and disagreement means the parse is wrong: the unit appears
@@ -27,19 +29,18 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import numpy as np
-import openpyxl
 
-from sensor_qaqc.core.records import EventType, LoggedEvent, LoggingMode
+from sensor_qaqc.core.records import EventType, LoggingMode
+from sensor_qaqc.instruments.containers import read_tables
 from sensor_qaqc.instruments.extraction import (
     ExtractedMetadata,
     Extraction,
     PublishedStatistics,
+    SourceEvent,
 )
 from sensor_qaqc.instruments.tables import parse_data, parse_details, parse_events
-from sensor_qaqc.instruments.timezones import to_utc
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from pathlib import Path
 
     from sensor_qaqc.instruments.sources import SourceFormat
@@ -65,14 +66,15 @@ LOCATION_OFF = "Off"
 
 
 class HOBOconnectReader:
-    """Reads one HOBOconnect workbook into an ``Extraction``.
+    """Reads a HOBOconnect export into an ``Extraction``, whatever holds it.
 
     The shape is injected rather than imported: the same reader runs against a
     corrected ``sources.yaml`` entry without a code change, which is what makes
     the catalogue the description of the format rather than documentation of it.
+    One consequence is that this class serves every entry whose tables are
+    Onset's - the workbook and its sheets written out as CSV files - because
+    the vendor's words are the only thing it actually knows.
     """
-
-    format_id = "hoboconnect_xlsx"
 
     def __init__(self, source_format: SourceFormat) -> None:
         if source_format.details is None:
@@ -81,21 +83,20 @@ class HOBOconnectReader:
         self._details_spec = source_format.details
         self._events_spec = source_format.events
 
+    @property
+    def format_id(self) -> str:
+        return self._format.format_id
+
     def read(self, path: Path) -> Extraction:
-        """Parse the workbook. Nothing is trimmed, masked or converted."""
-        workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        try:
-            # Read every sheet out before closing: a read_only worksheet is a
-            # cursor into the open file, not a table already in memory.
-            data = parse_data(self._rows(workbook, "data"), self._format.data)
-            details = parse_details(self._rows(workbook, "details"), self._details_spec)
-            logged = (
-                parse_events(self._rows(workbook, "events"), self._events_spec)
-                if self._events_spec is not None
-                else None
-            )
-        finally:
-            workbook.close()
+        """Parse the source. Nothing is trimmed, masked or converted."""
+        loaded = read_tables(self._format, path)
+        data = parse_data(loaded.tables["data"], self._format.data, cells=loaded.cells)
+        details = parse_details(loaded.tables["details"], self._details_spec)
+        logged = (
+            parse_events(loaded.tables["events"], self._events_spec, cells=loaded.cells)
+            if self._events_spec is not None
+            else None
+        )
 
         notes = list(data.notes)
         units = self._units(data.unit)
@@ -104,7 +105,7 @@ class HOBOconnectReader:
         events = self._events(logged, data.timezone_label, notes)
         return Extraction(
             format_id=self.format_id,
-            timestamps=to_utc(data.timestamps, data.timezone_label),
+            timestamps=data.timestamps,
             values=np.asarray(data.values, dtype=np.float64),
             metadata=self._metadata(details, units, data.timezone_label, notes),
             published=published,
@@ -113,8 +114,8 @@ class HOBOconnectReader:
         )
 
     def _events(
-        self, logged: ParsedEvents | None, label: str, notes: list[str]
-    ) -> tuple[LoggedEvent, ...]:
+        self, logged: ParsedEvents | None, label: str | None, notes: list[str]
+    ) -> tuple[SourceEvent, ...]:
         """Normalise the log's column names into the canonical vocabulary."""
         if logged is None:
             return ()
@@ -125,25 +126,16 @@ class HOBOconnectReader:
                 " shift the log against the samples"
             )
         notes.extend(logged.notes)
-        stamps = to_utc([event.at for event in logged.events], label) if logged.events else []
         return tuple(
-            LoggedEvent(at=when, event_type=_event_type(event.label))
-            for event, when in zip(logged.events, stamps, strict=True)
+            SourceEvent(at=event.at, event_type=_event_type(event.label)) for event in logged.events
         )
 
-    def _rows(self, workbook: openpyxl.Workbook, table: str) -> list[Sequence[object]]:
-        """Return the rows of the sheet ``sources.yaml`` puts this table in."""
-        where = self._format.tables.get(table)
-        if where is None:
-            raise ValueError(f"{self.format_id} does not say which sheet holds the {table} table")
-        if where not in workbook.sheetnames:
+    def _units(self, raw: str | None) -> str:
+        if raw is None:
             raise ValueError(
-                f"the workbook has no {where!r} sheet for the {table} table;"
-                f" it has: {', '.join(workbook.sheetnames)}"
+                f"{self.format_id} did not capture a unit from the data header, but this"
+                " reader has no other statement of one; the catalogue entry is wrong"
             )
-        return list(workbook[where].iter_rows(values_only=True))
-
-    def _units(self, raw: str) -> str:
         if raw not in UNIT_SYMBOLS:
             known = ", ".join(sorted(UNIT_SYMBOLS))
             raise ValueError(
@@ -170,7 +162,7 @@ class HOBOconnectReader:
             )
 
     def _metadata(
-        self, details: DetailsTable, units: str, label: str, notes: list[str]
+        self, details: DetailsTable, units: str, label: str | None, notes: list[str]
     ) -> ExtractedMetadata:
         location = details.optional(DEPLOYMENT_INFO, "Location")
         if location is not None and location != LOCATION_OFF:
@@ -195,7 +187,7 @@ class HOBOconnectReader:
         )
 
     def _statistics(
-        self, details: DetailsTable, units: str, label: str
+        self, details: DetailsTable, units: str, label: str | None
     ) -> tuple[PublishedStatistics | None, list[str]]:
         published = details.section(SERIES_STATISTICS)
         if not published:
@@ -274,7 +266,7 @@ def _logging_mode(raw: str) -> LoggingMode:
     return LOGGING_MODES[mode]
 
 
-def _sample_time(raw: str, label: str) -> object:
+def _sample_time(raw: str, label: str | None) -> datetime:
     stamp, _, declared = raw.rpartition(" ")
     if declared != label:
         raise ValueError(
@@ -282,7 +274,8 @@ def _sample_time(raw: str, label: str) -> object:
             f" header declares {label!r}; the export states the zone twice and they disagree"
         )
     try:
-        naive = datetime.strptime(stamp, DETAILS_TIME)  # noqa: DTZ007 - naive local by construction; the label is checked above and applied by to_utc
+        # Naive local by construction: the label is checked above, and
+        # assemble is where a local stamp becomes UTC.
+        return datetime.strptime(stamp, DETAILS_TIME)  # noqa: DTZ007
     except ValueError as error:
         raise ValueError(f"the published sample time {raw!r} is not a readable stamp") from error
-    return to_utc([naive], label)[0]

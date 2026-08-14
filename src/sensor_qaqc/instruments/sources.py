@@ -27,10 +27,16 @@ import yaml
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-# Grown by the adapter that reads the new container (#3 slice 6 adds csv).
-KNOWN_CONTAINERS = frozenset({"xlsx"})
-# Named groups a parser reads off each pattern; missing one is a file error.
-REQUIRED_GROUPS = {"timestamp_column": ("timezone",), "value_column": ("unit",)}
+# Grown by the adapter that reads the new container.
+KNOWN_CONTAINERS = frozenset({"xlsx", "csv"})
+# Containers whose cells are text, so a timestamp format must be declared: a
+# typed cell needs none, and inferring one is how a day becomes a month for
+# the twelve days of the year where both readings parse.
+TEXT_CONTAINERS = frozenset({"csv"})
+# Facts a data header can state for itself, and the pattern group each is read
+# from. `header_declares` must agree with the patterns exactly: a format
+# cannot claim a fact it does not capture, nor capture one it did not declare.
+DECLARABLE_FACTS = {"timezone": "timestamp_column", "unit": "value_column"}
 
 
 class UnknownFormatError(LookupError):
@@ -45,6 +51,7 @@ class DataTableSpec:
     sample_number_column: str
     timestamp_column: re.Pattern[str]
     value_column: re.Pattern[str]
+    header_declares: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,7 @@ class SourceFormat:
     container: str
     tables: Mapping[str, str]
     data: DataTableSpec
+    timestamp_format: str | None = None
     events: EventsTableSpec | None = None
     details: DetailsTableSpec | None = None
 
@@ -110,26 +118,56 @@ class SourceCatalogue:
 
 def _pattern(format_id: str, table: str, key: str, raw: object) -> re.Pattern[str]:
     try:
-        compiled = re.compile(str(raw))
+        return re.compile(str(raw))
     except re.error as error:
         raise ValueError(f"{format_id}.{table}.{key} is not a valid regex: {error}") from error
-    missing = [name for name in REQUIRED_GROUPS.get(key, ()) if name not in compiled.groupindex]
-    if missing:
+
+
+def _check_declared(
+    format_id: str, declares: frozenset[str], patterns: Mapping[str, re.Pattern[str]]
+) -> None:
+    """Check that the declared facts and the capture groups are one set."""
+    unknown = sorted(declares - set(DECLARABLE_FACTS))
+    if unknown:
         raise ValueError(
-            f"{format_id}.{table}.{key} must capture {missing} by name;"
-            f" the parser reads the value off the group, never off a position"
+            f"{format_id}.data.header_declares names {unknown};"
+            f" a header can declare: {sorted(DECLARABLE_FACTS)}"
         )
-    return compiled
+    for fact, key in DECLARABLE_FACTS.items():
+        captured = fact in patterns[key].groupindex
+        if fact in declares and not captured:
+            raise ValueError(
+                f"{format_id}.data declares {fact!r} but {key} does not capture it by name;"
+                " the parser reads the value off the group, never off a position"
+            )
+        if fact not in declares and captured:
+            raise ValueError(
+                f"{format_id}.data captures {fact!r} in {key} without declaring it;"
+                " a fact extracted but undeclared is one nobody reviewed"
+            )
 
 
 def _data_spec(format_id: str, raw: Mapping[str, object]) -> DataTableSpec:
+    patterns = {
+        key: _pattern(format_id, "data", key, raw.get(key))
+        for key in ("timestamp_column", "value_column")
+    }
+    declared = raw.get("header_declares")
+    if not isinstance(declared, list):
+        # A malformed catalogue is a bad value in a file a human edits, not a
+        # caller handing this function the wrong type.
+        raise ValueError(  # noqa: TRY004
+            f"{format_id}.data must declare what its header states as a list"
+            f" (empty for a header that states nothing), got {declared!r}"
+        )
+    declares = frozenset(str(fact) for fact in declared)
+    _check_declared(format_id, declares, patterns)
     return DataTableSpec(
         header_row=_positive_int(format_id, "data.header_row", raw.get("header_row")),
         sample_number_column=str(raw.get("sample_number_column", "")),
-        timestamp_column=_pattern(
-            format_id, "data", "timestamp_column", raw.get("timestamp_column")
-        ),
-        value_column=_pattern(format_id, "data", "value_column", raw.get("value_column")),
+        timestamp_column=patterns["timestamp_column"],
+        value_column=patterns["value_column"],
+        header_declares=declares,
     )
 
 
@@ -167,6 +205,22 @@ def _details_spec(format_id: str, raw: Mapping[str, object]) -> DetailsTableSpec
     )
 
 
+def _timestamp_format(format_id: str, container: str, raw: object) -> str | None:
+    """Return the strptime format a text container needs, or refuse."""
+    declared = str(raw) if raw is not None else None
+    if container in TEXT_CONTAINERS and not declared:
+        raise ValueError(
+            f"{format_id} is a {container} container, whose cells are text, so it must"
+            " declare the timestamp_format its stamps are written in"
+        )
+    if container not in TEXT_CONTAINERS and declared:
+        raise ValueError(
+            f"{format_id} declares a timestamp_format, but a {container} cell already"
+            " carries its type; the declaration would be read by nobody"
+        )
+    return declared
+
+
 def _positive_int(format_id: str, key: str, raw: object) -> int:
     if not isinstance(raw, int) or isinstance(raw, bool) or raw < 1:
         raise ValueError(f"{format_id}.{key} must be a 1-based position, got {raw!r}")
@@ -196,6 +250,7 @@ def _format(format_id: str, raw: Mapping[str, object]) -> SourceFormat:
         container=container,
         tables={str(name): str(where) for name, where in tables.items()},
         data=_data_spec(format_id, data),
+        timestamp_format=_timestamp_format(format_id, container, raw.get("timestamp_format")),
         events=_events_spec(format_id, events) if isinstance(events, dict) else None,
         details=_details_spec(format_id, details) if isinstance(details, dict) else None,
     )
